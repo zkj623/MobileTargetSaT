@@ -1,10 +1,11 @@
 tar_pos = [45;70];
 %robot state
-z=[30;20;pi/2;1];
+%z=[30;20;pi/2;1];
 %z=[90;90;-pi/2;1];
-%z=[5;30;pi/2;1];
+z=[5;30;pi/2;1];
 %z=[5;80;-pi/2;1];
 %z=[75;20;pi/2;1];
+%z=[45;55;pi/2;1];
 
 f = @(x) x+[0.8;0.8*cos(0.2*x(1))];
 %f = @(x) x+[0.5;0];
@@ -107,7 +108,7 @@ particles = mvnrnd(tar_pos,10*eye(2),625)';
 N = size(particles,2);%粒子的个数
 w = zeros(1,N);
 
-myvideo = VideoWriter('MIPFT_1112_range_11.avi');
+myvideo = VideoWriter('MIPFT_1126_range_1.avi');
 myvideo.FrameRate = 3;
 open(myvideo);
 simlen = 100;
@@ -279,7 +280,7 @@ else
     else
         begin = list_tmp(begin).children(randperm(length(list_tmp(begin).children),1));
         o = list_tmp(begin).h(3,end);
-        flag = 0;
+        flag = 0; 
     end
     num_o = begin;
     if o~=-100%这里如果不走PF可能会出现infeasible的粒子
@@ -407,6 +408,7 @@ end
 end
 
 function reward = rollOut(node,eta,depth,B,w,f,h,R,r,is_tracking,polyin,region,V,F,Sim)
+%{
 if depth == 0
     reward = 0;
     return
@@ -432,7 +434,7 @@ else
     node.state(1) = node.state(1)+cos(node.state(3))*node.state(4);
     node.state(2) = node.state(2)+sin(node.state(3))*node.state(4);
     if any([0;0] >= node.state(1:2))||any([100;100] <= node.state(1:2))%||region(ceil(node.state(1)),ceil(node.state(2))) == 0||V(ceil(node.state(1)),ceil(node.state(2)),ceil(state(1)),ceil(state(2))) == 0
-        reward = -0.1;
+        reward = 0;
         return
     end
     
@@ -443,6 +445,78 @@ else
 %     I = @(x) x;
 %    [B,w] = PF(node.state,B,w,o,r,zeros(2,2),R,I,h,list_obstacle);
     reward = reward + eta*rollOut(node,eta,depth-1,B,w,f,h,R,r,is_tracking,polyin,region,V,F,Sim);
+end
+%}
+if depth == 0
+    reward = 0;
+    return
+else
+    f = F{Sim};
+    B = f(B);
+    
+    jj = 1;
+    for ii = 1:size(B,2)
+        if any([0;0] > B(:,jj))||any([100;100] < B(:,jj))||region(ceil(B(1,jj)),ceil(B(2,jj))) == 0
+            B(:,jj) = [];
+            w(jj) = [];
+            continue
+        end
+        jj = jj+1;
+    end
+    w = w./sum(w);
+    
+    if rand < 0.5
+        id = randperm(length(node.a),1);
+        action = node.a(:,id);
+        state = node.state;
+        state(3) = state(3)+action(1);
+        state(4) = state(4)+action(2);
+        state(1) = state(1)+cos(state(3))*state(4);
+        state(2) = state(2)+sin(state(3))*state(4);
+        if any([0;0] >= state(1:2))||any([100;100] <= state(1:2))||region(ceil(state(1)),ceil(state(2))) == 0||V(ceil(node.state(1)),ceil(node.state(2)),ceil(state(1)),ceil(state(2))) == 0
+            reward = 0;
+            node.a(:,id) = [];
+        else
+            reward = MI(node.state,size(B,2),B,w,is_tracking,V);
+            node.state = state;
+        end
+    else
+        action_opt = [];
+        target = [B(1,:)*w;B(2,:)*w];
+        mindis = 1000;
+        for jj = 1:length(node.a)
+            action = node.a(:,jj);
+            state = node.state;
+            state(3) = state(3)+action(1);
+            state(4) = state(4)+action(2);
+            state(1) = state(1)+cos(state(3))*state(4);
+            state(2) = state(2)+sin(state(3))*state(4);
+            if any([0;0] >= state(1:2))||any([100;100] <= state(1:2))||region(ceil(state(1)),ceil(state(2))) == 0||V(ceil(node.state(1)),ceil(node.state(2)),ceil(state(1)),ceil(state(2))) == 0
+                continue
+            end
+            if norm(state(1:2)-target) < mindis
+                mindis = norm(state(1:2)-target);
+                action_opt = action;
+            end
+        end
+        if isempty(action_opt)
+            reward = 0;
+        else
+            node.state(3) = node.state(3)+action_opt(1);
+            node.state(4) = node.state(4)+action_opt(2);
+            node.state(1) = node.state(1)+cos(node.state(3))*node.state(4);
+            node.state(2) = node.state(2)+sin(node.state(3))*node.state(4);
+            reward = MI(node.state,size(B,2),B,w,is_tracking,V);
+        end
+    end
+    
+
+%     mu = h(B,node.state)';
+%     gm = gmdistribution(mu,R);
+%     o = random(gm);
+%     I = @(x) x;
+%    [B,w] = PF(node.state,B,w,o,r,zeros(2,2),R,I,h,list_obstacle);
+    reward = reward + eta*rollOut(node,eta,depth-1,B,w,f,h,R,r,is_tracking,polyin,region,V,F,Sim+1);
 end
 end
 
@@ -505,12 +579,13 @@ end
 
 %}
 Cidx = zeros(size(particles,2),2);
-flag = zeros(100,100);
+flag = zeros(200,200);
 N = 0;
+grid_size = 2.5;
 for mm = 1:size(particles,2)
-    id1 = ceil(particles(1,mm)/2.5)+5;
+    id1 = ceil(particles(1,mm)/grid_size)+5;
     Cidx(mm,1) = id1;
-    id2 = ceil(particles(2,mm)/2.5)+5;
+    id2 = ceil(particles(2,mm)/grid_size)+5;
     Cidx(mm,2) = id2;
     if flag(id1,id2) == 0
         N = N + 1;
@@ -557,6 +632,7 @@ else
 end
 %}
 
+%
 %构造sigma点的参数
 nx = 1;
 b = repmat({R},nx,1);
@@ -600,8 +676,24 @@ for jj = 1:N
     end
     tmp1 = tmp1 + w(jj) * tmp2;
 end
+%}
+%Taylor series expansion (Charrow)
+%{
+tmp1 = 0;
+for jj = 1:N
+    tmp2 = 0;
+    for kk = 1:N
+        if FOV(jj)==1&&FOV(kk)==1
+            tmp2 = tmp2+w(kk)*normpdf(mu(jj),mu(kk),sqrt(R));
+        elseif  FOV(jj)==FOV(kk)
+            tmp2 = tmp2+w(kk);
+        end
+    end
+    tmp1 = tmp1 + w(jj)*log(tmp2);
+end
+%}
 reward = -tmp1-H_cond;
-if reward < -10^-10
+if reward < -10^1
     error('1');
 elseif reward < 0
     reward = 0;
