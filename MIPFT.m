@@ -2,33 +2,44 @@ tar_pos = [45;70];
 %robot state
 %z=[30;20;pi/2;1];
 %z=[90;90;-pi/2;1];
-z=[5;30;pi/2;1];
+%z=[5;30;pi/2;1];
 %z=[5;80;-pi/2;1];
 %z=[75;20;pi/2;1];
-%z=[45;55;pi/2;1];
+z=[45;60;pi/2;1];
+%z=[30;90;0;1];
 
 f = @(x) x+[0.8;0.8*cos(0.2*x(1))];
 %f = @(x) x+[0.5;0];
 Q = 0.25*eye(2);
 %传感器建模 'ran'
-h = @(x,z) sqrt(sum((x-z(1:2)).^2)+0.1);
-%h = @(x,z) atan2(x(2,:)-z(2),x(1,:)-z(1))-z(3);
-R = 1;%观测噪声方差
-r = 20;%观测范围
+%h = @(x,z) sqrt(sum((x-z(1:2)).^2)+0.1);
+h = @(x,z) atan2(x(2,:)-z(2),x(1,:)-z(1))-z(3);
+R = 0.1;%观测噪声方差
+r = 15;%观测范围
 
 %障碍物定义obstacle
 num_obstacle = 7;
 polyin = repmat(Obstacle,num_obstacle,1);
-
-polyin(1).points = [10,10,20,20;0,60,60,0];
+%
+polyin(1).points = [15,15,25,25;0,60,60,0];
 polyin(2).points = [10,10,20,20;70,90,90,70];
 polyin(3).points = [35,35,40,40;35,80,80,35];
 polyin(4).points = [50,50,70,70;0,30,30,0];
 polyin(5).points = [50,50,70,70;55,75,75,55];
 polyin(6).points = [80,80,85,85;30,55,55,30];
 polyin(7).points = [80,80,85,85;65,100,100,65];
+%}
+%{
+polyin(1).points = [13,13,27,27;0,62,62,0];
+polyin(2).points = [8,8,22,22;68,92,92,68];
+polyin(3).points = [33,33,42,42;33,82,82,33];
+polyin(4).points = [48,48,72,72;0,32,32,0];
+polyin(5).points = [48,48,72,72;53,77,77,53];
+polyin(6).points = [78,78,87,87;28,57,57,28];
+polyin(7).points = [78,78,87,87;63,100,100,63];
+%}
 
-x1 = [10,10,20,20];
+x1 = [15,15,25,25];
 y1 = [0,60,60,0];
 x2 = [10,10,20,20];
 y2 = [70,90,90,70];
@@ -108,7 +119,7 @@ particles = mvnrnd(tar_pos,10*eye(2),625)';
 N = size(particles,2);%粒子的个数
 w = zeros(1,N);
 
-myvideo = VideoWriter('MIPFT_1126_range_1.avi');
+myvideo = VideoWriter('MIPFT_1222_bearing_1.avi');
 myvideo.FrameRate = 3;
 open(myvideo);
 simlen = 100;
@@ -132,6 +143,7 @@ end
 
 list = repmat(Node_IMPFT,simlen,500);
 
+a_space = [pi/4,pi/4,pi/4,pi/4,pi/4,pi/4,0,0,0,0,0,0,-pi/4,-pi/4,-pi/4,-pi/4,-pi/4,-pi/4;-3,-1.5,-0.5,0,0.5,1.5,-3,-1.5,-0.5,0,0.5,1.5,-3,-1.5,-0.5,0,0.5,1.5];
 %% %MCAP
 for ii = 1:simlen
     tic
@@ -140,9 +152,8 @@ for ii = 1:simlen
     %target move
     tar_pos = f(tar_pos);
 
-    
     %generate measurement
-    if inFOV(z(1:2),tar_pos,r)&&V(ceil(z(1)),ceil(z(2)),ceil(tar_pos(1)),ceil(tar_pos(2)))
+    if inFOV(z(1:3),tar_pos,r)&&V(ceil(z(1)),ceil(z(2)),ceil(tar_pos(1)),ceil(tar_pos(2)))
         y = h(tar_pos,z)+normrnd(0,sqrt(R));
     else
         y = -100;
@@ -153,7 +164,7 @@ for ii = 1:simlen
     
     %IMPFT
     is_tracking = 0;
-    if inFOV(z(1:2),tar_pos,r)&&V(ceil(z(1)),ceil(z(2)),ceil(tar_pos(1)),ceil(tar_pos(2)))
+    if inFOV(z(1:3),tar_pos,r)&&V(ceil(z(1)),ceil(z(2)),ceil(tar_pos(1)),ceil(tar_pos(2)))
         is_tracking = 1;
     end
     
@@ -173,7 +184,7 @@ for ii = 1:simlen
     list_tmp = [list_tmp,root];
     
     depth = 10;
-    eta = 0.9;%discount factor
+    eta = 0.5;%discount factor
     num = 1;%addtion point index
     for jj = 1:planlen
         %tic
@@ -187,10 +198,10 @@ for ii = 1:simlen
         val = list_tmp(list_tmp(1).children(jj)).Q;
         if val>max_value
             max_value = val;
-            num = jj;
+            maxid = jj;
         end
     end
-    opt = list_tmp(1).children(num);
+    opt = list_tmp(1).children(maxid);
     state_opt = list_tmp(opt).state;
     
     list(ii,1:length(list_tmp)) = list_tmp;
@@ -202,11 +213,19 @@ for ii = 1:simlen
     plot(particles(1,:),particles(2,:),'.');
     plot(tar_pos(1),tar_pos(2),'g+');
     plot(z(1),z(2),'r*');
+    %{
     theta=linspace(0,2*pi);
     plot(z(1)+r*cos(theta),z(2)+r*sin(theta),'r');
     z = state_opt;
     plot(z(1),z(2),'b*');
     plot(z(1)+r*cos(theta),z(2)+r*sin(theta),'b');
+    %}
+    %
+    plotFOV(z(1:3),'r');
+    z = state_opt;
+    plot(z(1),z(2),'b*');
+    plotFOV(z(1:3),'b');
+    %}
     text(5,95,num2str(ii));
     drawnow limitrate
     set(gcf,'position',[1000,500,1080,720]);
@@ -228,11 +247,40 @@ if depth == 0
     return
 else
     list_tmp(begin).N = list_tmp(begin).N+1;
-    if length(list_tmp(begin).children) == list_tmp(begin).children_maxnum
-        [begin,list_tmp,num] = best_child(begin,0.732,list_tmp,num,polyin,region,V);
+    %if length(list_tmp(begin).children) == list_tmp(begin).children_maxnum
+    if isempty(list_tmp(begin).a)
+        if ~isempty(list_tmp(begin).children)
+            [begin,list_tmp] = best_child(begin,0.732,list_tmp,num,polyin,region,V);
+        else
+            list_tmp(list_tmp(begin).parent).children(find(list_tmp(list_tmp(begin).parent).children==begin))=[];
+            list_tmp(begin).Q = 0;
+            Reward = 0;
+            return
+%             list_tmp(begin).state(3) = list_tmp(begin).state(3)+pi;
+%             list_tmp(begin).children_maxnum = 18;
+%             list_tmp(begin).a = [pi/4,pi/4,pi/4,pi/4,pi/4,pi/4,0,0,0,0,0,0,-pi/4,-pi/4,-pi/4,-pi/4,-pi/4,-pi/4;-3,-1.5,-0.5,0,0.5,1.5,-3,-1.5,-0.5,0,0.5,1.5,-3,-1.5,-0.5,0,0.5,1.5];
+%             num = num + 1;
+%             [list_tmp,begin] = expand(begin,num,list_tmp,0,1,polyin,region,V);
+        end
     else
         num = num + 1;
-        [list_tmp,begin] = expand(begin,num,list_tmp,0,1,polyin,region,V);
+        [list_tmp,begin,flag2] = expand(begin,num,list_tmp,0,1,polyin,region,V);
+        if flag2 == 0
+            num = num-1;
+            if ~isempty(list_tmp(begin).children)
+                [begin,list_tmp] = best_child(begin,0.732,list_tmp,num,polyin,region,V);
+            else
+                list_tmp(list_tmp(begin).parent).children(find(list_tmp(list_tmp(begin).parent).children==begin))=[];
+                list_tmp(begin).Q = 0;
+                Reward = 0;
+                return
+%             list_tmp(begin).state(3) = list_tmp(begin).state(3)+pi;
+%             list_tmp(begin).children_maxnum = 18;
+%             list_tmp(begin).a = [pi/4,pi/4,pi/4,pi/4,pi/4,pi/4,0,0,0,0,0,0,-pi/4,-pi/4,-pi/4,-pi/4,-pi/4,-pi/4;-3,-1.5,-0.5,0,0.5,1.5,-3,-1.5,-0.5,0,0.5,1.5,-3,-1.5,-0.5,0,0.5,1.5];
+%             num = num + 1;
+%             [list_tmp,begin] = expand(begin,num,list_tmp,0,1,polyin,region,V);
+            end
+        end
     end
     num_a = begin;
     list_tmp(num_a).N = list_tmp(num_a).N+1;
@@ -257,7 +305,7 @@ else
         jj = 1;
         ii = 1;
         while(ii<=N)
-            if inFOV(state(1:2),B(:,jj),r) == 0||V(ceil(state(1)),ceil(state(2)),ceil(B(1,jj)),ceil(B(2,jj))) == 0
+            if inFOV(state(1:3),B(:,jj),r) == 0||V(ceil(state(1)),ceil(state(2)),ceil(B(1,jj)),ceil(B(2,jj))) == 0
                 B_tmp(:,jj) = [];
             else
                 jj = jj + 1;
@@ -282,6 +330,7 @@ else
         o = list_tmp(begin).h(3,end);
         flag = 0; 
     end
+    %o=-100;
     num_o = begin;
     if o~=-100%这里如果不走PF可能会出现infeasible的粒子
         I = @(x) x;
@@ -291,6 +340,7 @@ else
         node = list_tmp(begin);
         Sim = Sim + 1;
         rollout = rollOut(node,eta,depth-1,B,w,f,h,R,r,is_tracking,polyin,region,V,F,Sim);
+        %rollout = 0;
         Reward = reward + eta*rollout;
     else
         Sim = Sim + 1;
@@ -302,15 +352,7 @@ else
 end
 end
 
-function [v,list_tmp,num] = best_child(begin,c,list_tmp,num,polyin,region,V)
-if isempty(list_tmp(begin).children) == 1
-    list_tmp(begin).state(3) = list_tmp(begin).state(3)+pi;
-    list_tmp(begin).children_maxnum = 18;
-    list_tmp(begin).a = [pi/4,pi/4,pi/4,pi/4,pi/4,pi/4,0,0,0,0,0,0,-pi/4,-pi/4,-pi/4,-pi/4,-pi/4,-pi/4;-3,-1.5,-0.5,0,0.5,1.5,-3,-1.5,-0.5,0,0.5,1.5,-3,-1.5,-0.5,0,0.5,1.5];
-    %num = num + 1;
-    [list_tmp,v] = expand(begin,num,list_tmp,0,1,polyin,region,V);
-    return
-end
+function [v,list_tmp] = best_child(begin,c,list_tmp,num,polyin,region,V)
 max = -100;
 for jj = 1:length(list_tmp(begin).children)
     node = list_tmp(begin);
@@ -323,25 +365,33 @@ for jj = 1:length(list_tmp(begin).children)
 end
 end
 
-function [list_tmp,begin] = expand(begin,num,list_tmp,o,tmp,polyin,region,V)
+function [list_tmp,begin,flag2] = expand(begin,num,list_tmp,o,tmp,polyin,region,V)
+flag2 = 1;
 node = list_tmp(begin); 
 state = zeros(4,1);
 if tmp == 1 %action
-    %
     while(1)
         flag = 0;
         inregion = 1;
-        if size(list_tmp(begin).a,2) == 0
-            [begin,list_tmp] = best_child(begin,0.732,list_tmp,num,polyin,region,V);
+        if isempty(list_tmp(begin).a)%&&isempty(list_tmp(begin).children)
+            flag2 = 0;
             return
         end
         ii = randperm(size(list_tmp(begin).a,2),1);
-        action = node.a(:,ii);
+        action = list_tmp(begin).a(:,ii);
         list_tmp(begin).a(:,ii) = [];
+        %
         state(3) = node.state(3)+action(1);
         state(4) = node.state(4)+action(2);
         state(1) = node.state(1)+cos(state(3))*state(4);
         state(2) = node.state(2)+sin(state(3))*state(4);
+        %}
+        %{
+        state(1) = node.state(1)+cos(node.state(3))*node.state(4);
+        state(2) = node.state(2)+sin(node.state(3))*node.state(4);
+        state(3) = node.state(3)+action(1);
+        state(4) = node.state(4)+action(2);
+        %}
         if any([0;0] >= state(1:2))||any([100;100] <= state(1:2))
             flag = 1;
             inregion = 0;
@@ -359,31 +409,11 @@ if tmp == 1 %action
             end
         end
         %}
-        if state(4)>=0 && flag == 0
+        if state(4)>=0 && state(4)<=5 && flag == 0
             break
         end
         list_tmp(begin).children_maxnum = list_tmp(begin).children_maxnum-1;
     end
-    %}
-    %{
-    while(1)
-        if size(list_tmp(begin).a,2) == 0
-            begin = best_child(begin,0.732,list_tmp);
-            return
-        end
-        ii = randperm(size(list_tmp(begin).a,2),1);
-        list_tmp(begin).a(:,ii) = [];
-        action = node.a(:,ii);
-        state(3) = node.state(3)+action(1);
-        state(4) = node.state(4)+action(2);
-        state(1) = node.state(1)+cos(state(3))*state(4);
-        state(2) = node.state(2)+sin(state(3))*state(4);
-        if state(4)>=0
-            break
-        end
-        list_tmp(begin).children_maxnum = list_tmp(begin).children_maxnum-1;
-    end
-    %}
     new = Node_IMPFT;
     new.num = num;
     new.state = state;
@@ -454,16 +484,23 @@ else
     f = F{Sim};
     B = f(B);
     
+    B_tmp1 = B;
     jj = 1;
-    for ii = 1:size(B,2)
-        if any([0;0] > B(:,jj))||any([100;100] < B(:,jj))||region(ceil(B(1,jj)),ceil(B(2,jj))) == 0
-            B(:,jj) = [];
-            w(jj) = [];
+    for ii = 1:size(B_tmp1,2)
+        if any([0;0] > B_tmp1(:,jj))||any([100;100] < B_tmp1(:,jj))||region(ceil(B_tmp1(1,jj)),ceil(B_tmp1(2,jj))) == 0
+            B_tmp1(:,jj) = [];
+            %w(jj) = [];
             continue
         end
         jj = jj+1;
     end
-    w = w./sum(w);
+    B_tmp2 = zeros(2,size(B,2));
+    B_tmp2(:,1:size(B_tmp1,2)) = B_tmp1;
+    for jj = size(B_tmp1,2)+1:size(B,2)
+        B_tmp2(:,jj) = B_tmp1(:,randperm(size(B_tmp1,2),1));
+    end
+    B = B_tmp2;
+    %w = w./sum(w);
     
     if rand < 0.5
         id = randperm(length(node.a),1);
@@ -473,7 +510,7 @@ else
         state(4) = state(4)+action(2);
         state(1) = state(1)+cos(state(3))*state(4);
         state(2) = state(2)+sin(state(3))*state(4);
-        if any([0;0] >= state(1:2))||any([100;100] <= state(1:2))||region(ceil(state(1)),ceil(state(2))) == 0||V(ceil(node.state(1)),ceil(node.state(2)),ceil(state(1)),ceil(state(2))) == 0
+        if any([0;0] >= state(1:2))||any([100;100] <= state(1:2))||region(ceil(state(1)),ceil(state(2))) == 0||V(ceil(node.state(1)),ceil(node.state(2)),ceil(state(1)),ceil(state(2))) == 0||state(4)<0%||state(4)>5
             reward = 0;
             node.a(:,id) = [];
         else
@@ -482,7 +519,7 @@ else
         end
     else
         action_opt = [];
-        target = [B(1,:)*w;B(2,:)*w];
+        target = [B(1,:)*w';B(2,:)*w'];
         mindis = 1000;
         for jj = 1:length(node.a)
             action = node.a(:,jj);
@@ -491,7 +528,7 @@ else
             state(4) = state(4)+action(2);
             state(1) = state(1)+cos(state(3))*state(4);
             state(2) = state(2)+sin(state(3))*state(4);
-            if any([0;0] >= state(1:2))||any([100;100] <= state(1:2))||region(ceil(state(1)),ceil(state(2))) == 0||V(ceil(node.state(1)),ceil(node.state(2)),ceil(state(1)),ceil(state(2))) == 0
+            if any([0;0] >= state(1:2))||any([100;100] <= state(1:2))||region(ceil(state(1)),ceil(state(2))) == 0||V(ceil(node.state(1)),ceil(node.state(2)),ceil(state(1)),ceil(state(2))) == 0||state(4)<0%||state(4)>5
                 continue
             end
             if norm(state(1:2)-target) < mindis
@@ -522,19 +559,23 @@ end
 
 function reward = MI(state,N,particles,w,is_tracking,V)
 H_cond = 0;
-R = 1;
-r = 20;
+R = 0.1;
+r = 15;
 H0 = 0.5*(log(2*pi)+1)+0.5*log(det(R));
-FOV = inFOV(state(1:2),particles,r);
+visibility = zeros(1,N);
+for jj = 1:N   
+    visibility(jj) = V(ceil(state(1)),ceil(state(2)),ceil(particles(1,jj)),ceil(particles(2,jj)));
+end
+FOV = inFOV(state(1:3),particles,r).*visibility;
 %
+ratio = 1;
 if is_tracking == 1%&&~all(FOV)
-    %
     particles_tmp1 = zeros(2,N);
     particles_tmp1(1,:) = particles(1,:).*FOV;
     particles_tmp1(2,:) = particles(2,:).*FOV;
-    w = w.*FOV';
+    w = w.*FOV;
     particles_tmp1(:,any(particles_tmp1,1)==0)=[];
-    w(any(w,2)==0,:)=[];
+    w(:,any(w,1)==0)=[];
     
     N_tmp = size(particles_tmp1,2);
     jj = 1;
@@ -547,7 +588,7 @@ if is_tracking == 1%&&~all(FOV)
         jj=jj+1;
     end
     w = w./sum(w);
-    %}
+    ratio = length(w)/N;
     %{
     particles_tmp1 = particles;
     jj = 1;
@@ -566,6 +607,8 @@ if is_tracking == 1%&&~all(FOV)
         return;
     end
     particles = particles_tmp1;
+    N = length(w);
+    %FOV = ones(1,N);
     %{
     %没必要补全 删除不需要的即可 验证了删除和补全差别很小
     particles_tmp2 = zeros(2,N);
@@ -576,8 +619,9 @@ if is_tracking == 1%&&~all(FOV)
     particles = particles_tmp2;
     %}
 end
-
 %}
+
+%
 Cidx = zeros(size(particles,2),2);
 flag = zeros(200,200);
 N = 0;
@@ -602,15 +646,16 @@ end
 for mm = 1:size(particles_tmp,2)
     particles(:,flag(Cidx(mm,1),Cidx(mm,2))) = particles(:,flag(Cidx(mm,1),Cidx(mm,2))) + particles_tmp(:,mm).*w_tmp(mm)./w(flag(Cidx(mm,1),Cidx(mm,2)));
 end
+%
 %%是否要修改 改了有问题（好像把atan2的突变问题解决后又没问题了）
 %
 visibility = zeros(1,N);
 for jj = 1:N   
     visibility(jj) = V(ceil(state(1)),ceil(state(2)),ceil(particles(1,jj)),ceil(particles(2,jj)));
 end
-FOV = inFOV(state(1:2),particles,r).*visibility;
+FOV = inFOV(state(1:3),particles,r).*visibility;
 %}
-%FOV = inFOV(state(1:2),particles,r);
+%FOV = inFOV(state(1:3),particles,r);
 
 for jj = 1:N
     H_temp = w(jj)*FOV(jj);
@@ -620,11 +665,11 @@ H_cond = H0*H_cond;
 
 mu = zeros(N,1);%观测的均值矩阵，第i行表示第i个粒子在未来T个时间步的观测均值
 for jj = 1:N
-    %mu(jj) = atan2(particles(2,jj)-state(2),particles(1,jj)-state(1));%-state(3);%state(3)~=0在目前解决atan2突变的方法有问题
-    mu(jj) = sqrt(sum((state(1:2)-particles(:,jj)).^2)+0.1);
+    mu(jj) = atan2(particles(2,jj)-state(2),particles(1,jj)-state(1));%-state(3);%state(3)~=0在目前解决atan2突变的方法有问题
+    %mu(jj) = sqrt(sum((state(1:2)-particles(:,jj)).^2)+0.1);
 end
 %解决atan2突变问题
-%{
+%
 if range(mod(mu,2*pi))>range(rem(mu,2*pi))
     mu = rem(mu,2*pi);
 else
@@ -665,13 +710,14 @@ for jj = 1:N
             tmp3=tmp3+w(ss)*tmp4;
         end
         %}
+        %
         if FOV(jj)==1
-            tmp4 = (FOV==1)'.*(normpdf(sigma(ll),mu,sqrt(R))-1)+1;
-            tmp4 = (FOV==1)'.*tmp4;
+            tmp4 = (FOV==1)'.*normpdf(sigma(ll),mu,sqrt(R));
         else
             tmp4 = (FOV==0)';
         end
         tmp3 = w*tmp4;
+        %}
         tmp2=tmp2+ws(ll)*log(tmp3);
     end
     tmp1 = tmp1 + w(jj) * tmp2;
@@ -693,6 +739,8 @@ for jj = 1:N
 end
 %}
 reward = -tmp1-H_cond;
+reward = reward*ratio;
+%reward = -tmp1;
 if reward < -10^1
     error('1');
 elseif reward < 0
@@ -701,15 +749,34 @@ end
 end
 
 function flag = inFOV(z,tar_pos,r)
-A = tar_pos - z;
-flag = sqrt(A(1,:).^2+(A(2,:).^2)) <= r;
+%
+A = tar_pos - z(1:2);
+flag1 = sqrt(A(1,:).^2+(A(2,:).^2)) < r;
+flag2 = sqrt(A(1,:).^2+(A(2,:).^2)) > 3;
+flag3 = (A(1,:)*cos(z(3))+A(2,:)*sin(z(3)))./sqrt(A(1,:).^2+(A(2,:).^2)) > sqrt(2)/2;
+flag = flag1.*flag2.*flag3;
+%}
+%{
+A = tar_pos - z(1:2);
+flag = sqrt(A(1,:).^2+(A(2,:).^2)) < r;
+%}
+end
+
+function plotFOV(state,color)
+hold on;
+r_min = 3;
+plot([state(1)+r_min*cos(state(3)+pi/4),state(1)+15*cos(state(3)+pi/4)],[state(2)+r_min*sin(state(3)+pi/4),state(2)+15*sin(state(3)+pi/4)],color);
+plot([state(1)+r_min*cos(state(3)-pi/4),state(1)+15*cos(state(3)-pi/4)],[state(2)+r_min*sin(state(3)-pi/4),state(2)+15*sin(state(3)-pi/4)],color);
+theta=linspace(state(3)-pi/4,state(3)+pi/4);
+plot(state(1)+r_min*cos(theta),state(2)+r_min*sin(theta),color);
+plot(state(1)+15*cos(theta),state(2)+15*sin(theta),color);
 end
 
 function [particles,w] = PF(z,particles,w,y,r,Q,R,f,h,polyin,region,V)
 N = size(particles,2);%粒子的个数
 particles = f(particles);
 particles = (mvnrnd(particles',Q))';
-FOV = inFOV(z(1:2),particles,r);
+FOV = inFOV(z(1:3),particles,r);
 P = normpdf(y,h(particles,z),sqrt(R));
 %
 P1 = normpdf(y,h(particles,z)+2*pi,sqrt(R));
@@ -736,7 +803,7 @@ for jj = 1:N
     else
         if FOV(jj)&&V(ceil(z(1)),ceil(z(2)),ceil(particles(1,jj)),ceil(particles(2,jj)))
             %bearing
-            %{
+            %
             if h(particles(:,jj),z) +z(3) <= 0
                 w(jj) = max([P(jj),P1(jj)]);
             else
@@ -744,7 +811,7 @@ for jj = 1:N
             end
             %}
             %range
-            w(jj) = P(jj);
+            %w(jj) = P(jj);
         else
             w(jj) = 10^-20;
         end
@@ -758,11 +825,6 @@ for jj = 1:N
     end
 %}  
 end
-%     for jj = 1:N
-%         if any([0;0] > particles(:,jj))||any([50;50] < particles(:,jj))
-%             w(ii) = 10^-20;
-%         end
-%     end
 w = w./sum(w);%归一化的粒子权重
 %重采样
 M = 1/N;
@@ -780,7 +842,7 @@ while (jj <= N)
     jj = jj + 1;
 end
 particles = new_particles;
-w = repmat(1/N, N, 1);
+w = repmat(1/N, 1, N);
 end
 
 function flag = isInside(obstacle,state)
