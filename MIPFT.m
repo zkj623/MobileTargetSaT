@@ -11,11 +11,17 @@ z=[45;60;pi/2;1];
 f = @(x) x+[0.8;0.8*cos(0.2*x(1))];
 %f = @(x) x+[0.5;0];
 Q = 0.25*eye(2);
-%传感器建模 'ran'
-%h = @(x,z) sqrt(sum((x-z(1:2)).^2)+0.1);
-h = @(x,z) atan2(x(2,:)-z(2),x(1,:)-z(1))-z(3);
-R = 0.1;%观测噪声方差
+%传感器建模 
+sensor = 'range';
 r = 15;%观测范围
+if strcmp(sensor,'range')
+h = @(x,z) sqrt(sum((x-z(1:2)).^2)+0.1);
+R = 1;%观测噪声方差
+end
+if strcmp(sensor,'bearing')
+h = @(x,z) atan2(x(2,:)-z(2),x(1,:)-z(1))-z(3);
+R = 0.1;%观测噪声方差     
+end
 
 %障碍物定义obstacle
 num_obstacle = 7;
@@ -160,7 +166,7 @@ for ii = 1:simlen
     end
     
     %particle filter
-    [particles,w] = PF(z,particles,w,y,r,Q,R,f,h,polyin,region,V);
+    [particles,w] = PF(z,particles,w,y,r,Q,R,f,h,polyin,region,V,sensor);
     
     %IMPFT
     is_tracking = 0;
@@ -188,7 +194,7 @@ for ii = 1:simlen
     num = 1;%addtion point index
     for jj = 1:planlen
         %tic
-        [list_tmp,Reward,num] = simulate(1,num,list_tmp,particles,depth,f,h,R,r,Q,eta,w,is_tracking,polyin,region,V,F,ii);
+        [list_tmp,Reward,num] = simulate(1,num,list_tmp,particles,depth,f,h,R,r,Q,eta,w,is_tracking,polyin,region,V,F,ii,sensor);
         %toc
     end
     
@@ -238,7 +244,7 @@ end
 close(myvideo);
 
 
-function [list_tmp,Reward,num] = simulate(begin,num,list_tmp,B,depth,f,h,R,r,Q,eta,w,is_tracking,polyin,region,V,F,Sim)
+function [list_tmp,Reward,num] = simulate(begin,num,list_tmp,B,depth,f,h,R,r,Q,eta,w,is_tracking,polyin,region,V,F,Sim,sensor)
 K = 3;
 alpha = 0.1;
 f = F{Sim};
@@ -299,7 +305,7 @@ else
     w = w./sum(w);
     
     N = size(B,2);
-    reward = MI(list_tmp(num_a).state,N,B,w,is_tracking,V); 
+    reward = MI(list_tmp(num_a).state,N,B,w,is_tracking,V,sensor); 
     if length(list_tmp(begin).children) <= K*(list_tmp(begin).N^alpha)
         B_tmp = B;
         jj = 1;
@@ -334,17 +340,17 @@ else
     num_o = begin;
     if o~=-100%这里如果不走PF可能会出现infeasible的粒子
         I = @(x) x;
-        [B,w] = PF(list_tmp(num_a).state,B,w,o,r,zeros(2,2),R,I,h,polyin,region,V);
+        [B,w] = PF(list_tmp(num_a).state,B,w,o,r,zeros(2,2),R,I,h,polyin,region,V,sensor);
     end
     if flag == 1
         node = list_tmp(begin);
         Sim = Sim + 1;
-        rollout = rollOut(node,eta,depth-1,B,w,f,h,R,r,is_tracking,polyin,region,V,F,Sim);
+        rollout = rollOut(node,eta,depth-1,B,w,f,h,R,r,is_tracking,polyin,region,V,F,Sim,sensor);
         %rollout = 0;
         Reward = reward + eta*rollout;
     else
         Sim = Sim + 1;
-        [list_tmp,Reward,num] = simulate(begin,num,list_tmp,B,depth-1,f,h,R,r,Q,eta,w,is_tracking,polyin,region,V,F,Sim);
+        [list_tmp,Reward,num] = simulate(begin,num,list_tmp,B,depth-1,f,h,R,r,Q,eta,w,is_tracking,polyin,region,V,F,Sim,sensor);
         Reward = reward + eta*Reward;
     end
     list_tmp(num_o).N = list_tmp(num_o).N+1;
@@ -437,7 +443,7 @@ end
     begin = num;
 end
 
-function reward = rollOut(node,eta,depth,B,w,f,h,R,r,is_tracking,polyin,region,V,F,Sim)
+function reward = rollOut(node,eta,depth,B,w,f,h,R,r,is_tracking,polyin,region,V,F,Sim,sensor)
 %{
 if depth == 0
     reward = 0;
@@ -514,7 +520,7 @@ else
             reward = 0;
             node.a(:,id) = [];
         else
-            reward = MI(node.state,size(B,2),B,w,is_tracking,V);
+            reward = MI(node.state,size(B,2),B,w,is_tracking,V,sensor);
             node.state = state;
         end
     else
@@ -543,7 +549,7 @@ else
             node.state(4) = node.state(4)+action_opt(2);
             node.state(1) = node.state(1)+cos(node.state(3))*node.state(4);
             node.state(2) = node.state(2)+sin(node.state(3))*node.state(4);
-            reward = MI(node.state,size(B,2),B,w,is_tracking,V);
+            reward = MI(node.state,size(B,2),B,w,is_tracking,V,sensor);
         end
     end
     
@@ -553,11 +559,11 @@ else
 %     o = random(gm);
 %     I = @(x) x;
 %    [B,w] = PF(node.state,B,w,o,r,zeros(2,2),R,I,h,list_obstacle);
-    reward = reward + eta*rollOut(node,eta,depth-1,B,w,f,h,R,r,is_tracking,polyin,region,V,F,Sim+1);
+    reward = reward + eta*rollOut(node,eta,depth-1,B,w,f,h,R,r,is_tracking,polyin,region,V,F,Sim+1,sensor);
 end
 end
 
-function reward = MI(state,N,particles,w,is_tracking,V)
+function reward = MI(state,N,particles,w,is_tracking,V,sensor)
 H_cond = 0;
 R = 0.1;
 r = 15;
@@ -665,18 +671,21 @@ H_cond = H0*H_cond;
 
 mu = zeros(N,1);%观测的均值矩阵，第i行表示第i个粒子在未来T个时间步的观测均值
 for jj = 1:N
-    mu(jj) = atan2(particles(2,jj)-state(2),particles(1,jj)-state(1));%-state(3);%state(3)~=0在目前解决atan2突变的方法有问题
-    %mu(jj) = sqrt(sum((state(1:2)-particles(:,jj)).^2)+0.1);
+    if strcmp(sensor,'range')
+        mu(jj) = sqrt(sum((state(1:2)-particles(:,jj)).^2)+0.1);
+    end
+    if strcmp(sensor,'bearing')
+        mu(jj) = atan2(particles(2,jj)-state(2),particles(1,jj)-state(1));%-state(3);%state(3)~=0在目前解决atan2突变的方法有问题
+    end
 end
 %解决atan2突变问题
-%
-if range(mod(mu,2*pi))>range(rem(mu,2*pi))
-    mu = rem(mu,2*pi);
-else
-    mu = mod(mu,2*pi);
+if strcmp(sensor,'bearing')
+    if range(mod(mu,2*pi))>range(rem(mu,2*pi))
+        mu = rem(mu,2*pi);
+    else
+        mu = mod(mu,2*pi);
+    end
 end
-%}
-
 %
 %构造sigma点的参数
 nx = 1;
@@ -772,7 +781,7 @@ plot(state(1)+r_min*cos(theta),state(2)+r_min*sin(theta),color);
 plot(state(1)+15*cos(theta),state(2)+15*sin(theta),color);
 end
 
-function [particles,w] = PF(z,particles,w,y,r,Q,R,f,h,polyin,region,V)
+function [particles,w] = PF(z,particles,w,y,r,Q,R,f,h,polyin,region,V,sensor)
 N = size(particles,2);%粒子的个数
 particles = f(particles);
 particles = (mvnrnd(particles',Q))';
@@ -802,16 +811,16 @@ for jj = 1:N
         %}
     else
         if FOV(jj)&&V(ceil(z(1)),ceil(z(2)),ceil(particles(1,jj)),ceil(particles(2,jj)))
-            %bearing
-            %
-            if h(particles(:,jj),z) +z(3) <= 0
-                w(jj) = max([P(jj),P1(jj)]);
-            else
-                w(jj) = max([P(jj),P2(jj)]);
+            if strcmp(sensor,'range')
+                w(jj) = P(jj);
             end
-            %}
-            %range
-            %w(jj) = P(jj);
+            if strcmp(sensor,'bearing')
+                if h(particles(:,jj),z) +z(3) <= 0
+                    w(jj) = max([P(jj),P1(jj)]);
+                else
+                    w(jj) = max([P(jj),P2(jj)]);
+                end
+            end
         else
             w(jj) = 10^-20;
         end
