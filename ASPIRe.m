@@ -81,23 +81,10 @@ for ii = 1:sim_len
         [rbt,optz,list_tmp] = rbt.Planner(fld,sim,plan_mode,list_tmp,tt,ii);
     end
 
-    toc
+    t = toc
     %rbt.traj = [rbt.traj,optz];
 
     list(ii,1:length(list_tmp)) = list_tmp;
-
-
-%     rbt = rbt.updState(optu);
-%     rbt.snum = snum;
-    
-%     u = rbt.convState(s,snum,'u');
-%     z = rbt.convState(s,snum,'z');
-%     x = rbt.convState(s,snum,'x'); 
-%     P = rbt.convState(s,snum,'P');
-%     x_pred = rbt.convState(s,snum,'x_pred');
-%     P_pred = rbt.convState(s,snum,'P_pred');
-%     K = rbt.convState(s,snum,'K');
-    %}
     
     % draw plot
     %sim.plotFilter(rbt,fld,tt,ii)
@@ -121,7 +108,7 @@ for ii = 1:sim_len
 %     end     
    %}
 
-    t = toc
+   
     if rbt.is_tracking
     time_tracking(tt) = time_tracking(tt) + t;
     else
@@ -171,5 +158,5 @@ end
 
 %% save simulation result
 
-save(sprintf("ASPIRe_%s_%s",prior_case,date),"est_err_all","loss_rate_all","t_search_all","particles_all","est_all","obs_all","traj_rbt");
+save(sprintf("%s_%s_%s",plan_mode,prior_case,date),"est_err_all","loss_rate_all","t_search_all","particles_all","est_all","obs_all","traj_rbt");
 % run resultAnalysis.m to analyze the simulation results
