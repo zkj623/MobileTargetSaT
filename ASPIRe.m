@@ -81,7 +81,7 @@ for ii = 1:sim_len
         [rbt,optz,list_tmp] = rbt.Planner(fld,sim,plan_mode,list_tmp,tt,ii);
     end
 
-    toc
+    t = toc
     %rbt.traj = [rbt.traj,optz];
 
     list(ii,1:length(list_tmp)) = list_tmp;
@@ -121,7 +121,6 @@ for ii = 1:sim_len
 %     end     
    %}
 
-    t = toc
     if rbt.is_tracking
     time_tracking(tt) = time_tracking(tt) + t;
     else
