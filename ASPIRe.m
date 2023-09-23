@@ -65,14 +65,16 @@ for ii = 1:sim_len
     rbt.est_pos = rbt.particles*rbt.w';
 
     error(ii) = norm(rbt.est_pos(1:2)-fld.target.pos(1:2));
-    
+
     rbt.inFOV_hist = [rbt.inFOV_hist rbt.is_tracking];
 
-    %     if is_tracking
-    %         break
-    %     end
-
     sim.plotFilter(rbt,fld,tt,ii);
+
+    if rbt.is_tracking
+        pause(0.1);
+        clf
+        break
+    end
     
     %% robot motion planning
     tic
@@ -86,7 +88,7 @@ for ii = 1:sim_len
     elseif strcmp(plan_mode,'sampling')
         %[optz,optu,s,snum,merit, model_merit, new_merit] = rbt.cvxPlanner_scp(fld,optz,optu,plan_mode);
     elseif strcmp(plan_mode,'ASPIRe')
-        [rbt,optz,list_tmp] = rbt.Planner(fld,sim,plan_mode,list_tmp,tt,ii);
+        [rbt,optz,list_tmp] = rbt.Planner(fld,sim,plan_mode,list_tmp,ps,pt,tt,ii);
     end
 
     t = toc
