@@ -841,7 +841,7 @@ classdef RobotClass
                 num_a = begin;
 
                 if ~this.is_tracking
-                    if any([0;0] >= list_tmp(num_a).state(1:2))||any([50;50] <= list_tmp(num_a).state(1:2))||fld.map.region_exp(ceil(list_tmp(num_a).state(1)),ceil(list_tmp(num_a).state(2))) == 0
+                    if any([1;1] >= list_tmp(num_a).state(1:2))||any([49;49] <= list_tmp(num_a).state(1:2))||fld.map.region_exp(ceil(list_tmp(num_a).state(1)),ceil(list_tmp(num_a).state(2))) == 0
                     %if any([0;0] >= list_tmp(num_a).state(1:2))||any([50;50] <= list_tmp(num_a).state(1:2))||any([0;0] >= list_tmp(num_a).inter_state(1:2))||any([50;50] <= list_tmp(num_a).inter_state(1:2))||fld.map.region_exp(ceil(list_tmp(num_a).state(1)),ceil(list_tmp(num_a).state(2))) == 0||fld.map.region_exp(ceil(list_tmp(num_a).inter_state(1)),ceil(list_tmp(num_a).inter_state(2))) == 0
                         list_tmp(num_a).N = list_tmp(num_a).N+1;
                         %%%% need to be modified

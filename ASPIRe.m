@@ -70,11 +70,11 @@ for ii = 1:sim_len
 
     sim.plotFilter(rbt,fld,tt,ii);
 
-    if rbt.is_tracking
-        pause(0.1);
-        clf
-        break
-    end
+%     if rbt.is_tracking
+%         pause(0.1);
+%         clf
+%         break
+%     end
 
     %% robot motion planning
     tic
