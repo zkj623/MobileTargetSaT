@@ -107,15 +107,6 @@ for ii = 1:sim_len
     end   
 
     clf
-    
-    % (TODO:changliu): need to add a useful termination condition
-    % terminating condition
-%     if trace(rbt.P) <= 1 && norm(fld.target.pos-rbt.est_pos) <= 2 && norm(rbt.state(1:2)-target.pos) <= 3
-%         display('target is localized')
-%         break
-%     end     
-   %}
-
    
     if rbt.is_tracking
     time_tracking(tt) = time_tracking(tt) + t;
