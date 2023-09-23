@@ -4,11 +4,6 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% Simulation Setup
-t_search_all = [];
-loss_rate_all = [];
-est_err_all = [];
-time_search_all = [];
-time_tracking_all = [];
 
 traj_rbt = cell(5,50);
 particles_all = cell(5,50,200);

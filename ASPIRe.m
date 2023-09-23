@@ -5,6 +5,12 @@ clear % clear global variables
 close all
 importfile('APFT_small_scene1.mat');
 
+t_search_all = [];
+loss_rate_all = [];
+est_err_all = [];
+time_search_all = [];
+time_tracking_all = [];
+
 for zz = 1:5
 t_search = zeros(50,1);
 traj_length = zeros(50,1);
