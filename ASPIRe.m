@@ -5,6 +5,12 @@ clear % clear global variables
 close all
 importfile('APFT_small_scene1.mat');
 
+t_search_all = [];
+loss_rate_all = [];
+est_err_all = [];
+time_search_all = [];
+time_tracking_all = [];
+
 for zz = 1:5
 t_search = zeros(50,1);
 traj_length = zeros(50,1);
@@ -14,7 +20,7 @@ time_search = zeros(50,1);
 time_tracking = zeros(50,1);
 runtime = zeros(50,1);
 
-for tt = 1:50 %44 %47
+for tt = 1:50 %1:50 %44 %47
 
 % set up parameters
 simSetup;
@@ -59,15 +65,17 @@ for ii = 1:sim_len
     rbt.est_pos = rbt.particles*rbt.w';
 
     error(ii) = norm(rbt.est_pos(1:2)-fld.target.pos(1:2));
-    
+
     rbt.inFOV_hist = [rbt.inFOV_hist rbt.is_tracking];
 
-    %     if is_tracking
-    %         break
-    %     end
-
     sim.plotFilter(rbt,fld,tt,ii);
-    
+
+    if rbt.is_tracking
+        pause(0.1);
+        clf
+        break
+    end
+
     %% robot motion planning
     tic
 
@@ -80,7 +88,7 @@ for ii = 1:sim_len
     elseif strcmp(plan_mode,'sampling')
         %[optz,optu,s,snum,merit, model_merit, new_merit] = rbt.cvxPlanner_scp(fld,optz,optu,plan_mode);
     elseif strcmp(plan_mode,'ASPIRe')
-        [rbt,optz,list_tmp] = rbt.Planner(fld,sim,plan_mode,list_tmp,tt,ii);
+        [rbt,optz,list_tmp] = rbt.Planner(fld,sim,plan_mode,list_tmp,ps,pt,tt,ii);
     end
 
     t = toc
@@ -91,15 +99,6 @@ for ii = 1:sim_len
 
 %     rbt = rbt.updState(optu);
 %     rbt.snum = snum;
-    
-%     u = rbt.convState(s,snum,'u');
-%     z = rbt.convState(s,snum,'z');
-%     x = rbt.convState(s,snum,'x'); 
-%     P = rbt.convState(s,snum,'P');
-%     x_pred = rbt.convState(s,snum,'x_pred');
-%     P_pred = rbt.convState(s,snum,'P_pred');
-%     K = rbt.convState(s,snum,'K');
-    %}
     
     % draw plot
     %sim.plotFilter(rbt,fld,tt,ii)
