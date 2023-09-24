@@ -33,7 +33,7 @@ optu = [];
 
 % save figures to video
 if save_video
-    vidObj = VideoWriter(sprintf('ASPIRe_%s_MCTS_multi_%d_%d_%s.avi',sensor_type,zz,tt,date));
+    vidObj = VideoWriter(sprintf('%s_%s_multi_%d_%d_%s.avi',plan_mode,sensor_type,zz,tt,date));
     vidObj.FrameRate = 3;
     open(vidObj);
 end
@@ -42,7 +42,6 @@ list = repmat(Node_IMPFT,210,500);
 
 error = zeros(200,1);
 
-tic
 for ii = 1:sim_len
     %fprintf('[main loop] gameSim.m, line %d, iteration %d, Progress: %d\n',MFileLineNr(),ii,ii/sim_len)
 

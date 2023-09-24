@@ -1154,8 +1154,8 @@ end
 
                 % 得加
                 %%%% need to be modified
-                %
-                if ~this.is_tracking&&norm([B(1,:)*w';B(2,:)*w']-node.state(1:2))<8
+                %{
+                if ~this.is_tracking&&norm([B(1,:)*w';B(2,:)*w']-node.state(1:2))<10
                 %if norm([B(1,:)*w';B(2,:)*w']-node.state(1:2))<50
                     flag3 = fld.map.region_exp(ceil(B_tmp1(1,:)),ceil(B_tmp1(2,:)));
                     flag3 = diag(flag3)';
