@@ -1,4 +1,4 @@
-% modified version
+% multi version
 
 % clc 
 clear % clear global variables
