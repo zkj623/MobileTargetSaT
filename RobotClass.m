@@ -47,6 +47,8 @@ classdef RobotClass
         w; % particles' weight
         N; % particles' number
         
+        % map
+        map;
 
         est_pos; % estimated target position
         est_pos_hist; % estimation history
@@ -64,6 +66,8 @@ classdef RobotClass
         a_T; % tracking phase
         int_pts_S;
         int_pts_T;
+
+        value_max;
 
 
         % performance metrics
@@ -110,6 +114,8 @@ classdef RobotClass
             this.particles = inPara.particles;
             this.w = inPara.w;
             this.N = inPara.N;
+
+            this.map = inPara.map;
 
             this.a_S = inPara.a_S;
             this.a_T = inPara.a_T;
@@ -187,13 +193,13 @@ classdef RobotClass
                     y = [-100;-100];
                 end
             elseif strcmp(this.sensor_type,'ran')
-                if this.inFOV(this.state,tar_pos)&&V(ceil(z(1)),ceil(z(2)),ceil(tar_pos(1)),ceil(tar_pos(2)))
+                if this.inFOV(this.state,tar_pos)&&fld.map.V(ceil(z(1)),ceil(z(2)),ceil(tar_pos(1)),ceil(tar_pos(2)))
                     y = this.h(tar_pos,this.state)+normrnd(0,this.R);
                 else
                     y = -100;
                 end
             elseif strcmp(this.sensor_type,'lin')
-                if this.inFOV(this.state,tar_pos)&&V(ceil(z(1)),ceil(z(2)),ceil(tar_pos(1)),ceil(tar_pos(2)))
+                if this.inFOV(this.state,tar_pos)&&fld.map.V(ceil(z(1)),ceil(z(2)),ceil(tar_pos(1)),ceil(tar_pos(2)))
                     y = this.h(tar_pos,this.state)+(mvnrnd([0;0],this.R))';
                 else
                     y = [-100;-100];
@@ -347,14 +353,16 @@ classdef RobotClass
             % particles = (mvnrnd(particles',Q))';
 
             if flag == 1
- 
+                %{
             control = [fld.target.control(tt,ii,1);fld.target.control(tt,ii,2)];
 
             t = 1;
             particles(1:2,:) = particles(1:2,:) + [control(1).*cos(particles(3,:))*t;control(1).*sin(particles(3,:))*t];
             particles(3,:) = particles(3,:) + control(2)*t;
             particles = (mvnrnd(particles',fld.target.Q))';
-
+                %}
+                %particles(1:2,:) = particles(1:2,:) -1 + 2*[rand;rand];
+                particles = (mvnrnd(particles',fld.target.Q))';
             end
 
             FOV = this.inFOV(state,particles(1:2,:));
@@ -377,7 +385,7 @@ classdef RobotClass
                     w(jj) = 10^-20;
                     continue
                 end
-                if fld.map.region(ceil(particles(1,jj)),ceil(particles(2,jj))) == 0
+                if this.map.region(ceil(particles(1,jj)),ceil(particles(2,jj))) < 0.3
                     w(jj) = 10^-20;
                     continue
                 end
@@ -443,287 +451,6 @@ classdef RobotClass
         end
 
         %% planning
-
-        % try re-writing the problem using cvx solver. Different from
-        % cvxPlanner below, which formulates the problem as a convex P (turns
-        % out not!), this one formulates the problem as QP each iteration
-        function [optz,optu, s, snum,merit, model_merit, new_merit] = cvxPlanner_scp(this,fld,optz,optu,plan_mode) % cvxPlanner(this,fld,init_sol)
-            % merit, model_merit, new_merit are the merit function value of
-            % x, approx merit value of xp, and merit function value of xp
-
-            % use the multi-layer approach similar to Sachin's work. Fix
-            % the parameter for the sensor, solve path planning. Then
-            % refine the parameter until close to reality. In each
-            % iteration, a QP program is solved. The initial solution
-            % comes from ngPlanner
-
-            % planing in non-Gaussian (GMM) belief space
-            N = this.mpc_hor;
-            dt = this.dt;
-
-            % target
-            tar = fld.target;
-            f = tar.f;
-            del_f = tar.del_f;
-            Q = tar.Q;
-
-            % sensor
-            h = this.h;
-            del_h = this.del_h;
-            R = this.R;
-            alp1 = this.alp1;
-            alp2 = this.alp2;
-            alp3 = this.alp3;
-            alp_inc = 5; % increament paramter for alphatr_inc
-            %
-            % config for optimization
-            cfg = this.cfg;
-
-            % set up simulation
-            if isempty(optz)
-                prev_state = [];
-            else
-                prev_state = struct('optz',optz,'optu',optu);
-            end
-
-            switch plan_mode
-                case 'lin'
-                    init_sol = genInitState_kf(this,fld,prev_state);
-                case 'nl'
-                    init_sol = genInitState(this,fld,prev_state);
-            end
-
-            zref = init_sol.z;
-            uref = init_sol.u;
-            xref = init_sol.x;
-            x_pred_ref = init_sol.x_pred;
-            Kref = init_sol.K;
-            Pref = init_sol.P;
-            P_pred_ref = init_sol.P_pred;
-            % construct the state
-            % s is the collection of all decision variables
-            % s = [z(:),u(:),x(:),xpred(:),P(:),P_pred(:),K(:)]
-            [s,snum] = this.setState(zref,uref,xref,x_pred_ref,Pref,P_pred_ref,Kref);
-
-            %             cfg.snum = snum;
-            %             this.cfg = cfg;
-            %             this.snum = snum;
-
-            %%% functions and parameters for scp
-            %%% objective
-            %             obj = @(s) this.getObj(s,snum);
-
-            % Q and q in quad linear obj term: x'*Q*x/2+q'*x
-            fQ = zeros(length(s));
-            q = zeros(1,length(s));
-
-            %%% NL constraints
-            % kinematics constraints
-            objKin = @(s) this.getKinConstr(s,snum);
-
-            % psd (positive semidefiniteness) constraint
-            objpsd = @(s) this.psdConstr(s,snum);
-
-            %             %% linear equality constraints
-            %             belief dynamics (note: this one could be written using
-            %             A_eq,b_eq, but it's error-prone and time-consuming.
-            %             So I use this form.
-            %             switch plan_mode
-            %                 case 'lin'
-            %                     constrLinEq = @(s) this.getLinEqConstr_kf(s,snum,tar);
-            %                 case 'nl'
-            %                     constrLinEq = @(s) this.getLinEqConstr(s,snum,tar);
-            %             end
-            %
-            %% linear inequality constraints
-            % bounds on states and input
-            % this.w_lb <= u(1,:) <= this.w_ub;
-            % this.a_lb <= u(2,:) <= this.a_ub;
-            % this.v_lb <= z(4,:) <= this.v_ub;
-            % [fld.fld_cor(1);fld.fld_cor(3)]<=z(1:2,ii+1)<=[fld.fld_cor(2);fld.fld_cor(4)];
-            constrLinIneq = @(s) this.getLinIneqConstr(s,snum,fld);
-
-            %             penalty_coeff = cfg.initial_penalty_coeff; % Coefficient of l1 penalties
-            %             trust_box_size = cfg.initial_trust_box_size; % The trust region will be a box around the current iterate x.
-            hinge = @(x) sum(max(x,0));
-            abssum = @(x) sum(abs(x));
-
-            gam_iter = 1;
-
-            %(10/9) determine whether est_tar is inside FOV.
-            if sum(this.y == -100) >= 1 % if no measurement is received
-                infovflag = false;
-            else
-                infovflag = true;
-            end
-
-            %% loop 1: change alpha in \gamma modeling
-            while(1)
-                fprintf('  [gamma loop] Robot.m, line %d.\n',MFileLineNr())
-                fprintf('  gamma loop #%d\n',gam_iter)
-
-                %                 switch plan_mode
-                %                     case 'lin'
-                %                         objBel = @(s) this.getBelConstr_kf(s,snum,alp1,alp2,alp3); % belief update
-                %                     case 'nl'
-                %                         objBel = @(s) this.getBelConstr(s,snum,alp1,alp2,alp3); % belief update
-                %                 end
-
-                %%% objective
-                obj = @(s) this.getObj(s,snum,alp1,alp2,alp3,infovflag);
-
-                penalty_coeff = cfg.initial_penalty_coeff; % Coefficient of l1 penalties
-
-                %% loop 2: penalty iteration
-                %                 ctol = 1e-2;
-                %                 mu = 0.1;
-                pen_iter = 0;
-                while(1) % loop 2 starts
-                    pen_iter = pen_iter+1;
-                    fprintf('    [Penalty loop] Robot.m, line %d\n', MFileLineNr())
-                    fprintf('    pentaly loop #%d\n',pen_iter);
-
-                    trust_box_size = cfg.initial_trust_box_size; % The trust region will be a box around the current iterate x.
-
-                    objNLineq = @(s) 0; %objpsd(s); % nonlinear inequality constraint here
-                    %                     objNLeq = @(s) [objKin(s);objBel(s)]; % nonlinear equality constraint here
-                    %                     objNLeq = @(s) 0;
-
-                    cvxConstr = @(s) 0;% this.psdConstr2(s,snum);
-
-                    %% loop 3: trust region SQP
-                    A_ineq = [];
-                    b_ineq = [];
-                    A_eq = [];
-                    b_eq = [];
-
-                    %%%%% this part may need to be moved to be outside of
-                    %%%%% loop 1. I need to try this out later.
-                    % compute linearized A and C matrix
-                    this = this.linParam(s,snum,tar);
-
-                    %%% linear equality constraints
-                    % belief dynamics (note: this one could be written using
-                    % A_eq,b_eq, but it's error-prone and time-consuming.
-                    % So I use this form.
-                    switch plan_mode
-                        case 'lin'
-                            constrLinEq = @(s) this.getLinEqConstr_kf(s,snum,tar);
-                        case 'nl'
-                            constrLinEq = @(s) this.getLinEqConstr(s,snum,tar);
-                    end
-
-                    %%% nonlinear equality constraint here
-                    switch plan_mode
-                        case 'lin'
-                            objBel = @(s) this.getBelConstr_kf(s,snum,alp1,alp2,alp3); % belief update
-                        case 'nl'
-                            objBel = @(s) this.getBelConstr(s,snum,tar,alp1,alp2,alp3); % belief update
-                    end
-
-                    objNLeq = @(s) [objKin(s);objBel(s)];
-
-                    % make initial solution feasible
-                    [sfea,success] = this.find_closest_feasible_point(s,constrLinIneq,constrLinEq,snum);
-                    if (~success)
-                        return;
-                    end
-
-                    % loop 3 starts
-                    [s, trust_box_size, success, merit, model_merit, new_merit] = this.minimize_merit_function(sfea, fQ, q, obj, A_ineq, b_ineq, A_eq, b_eq, constrLinIneq, constrLinEq, objNLineq, objNLeq, hinge, abssum, cfg, penalty_coeff, trust_box_size, snum, fld);
-                    % loop 3 ends
-
-                    if(hinge(objNLineq(s)) + abssum(objNLeq(s)) < cfg.cnt_tolerance || pen_iter >= cfg.max_penalty_iter ) %cfg.max_iter
-                        break;
-                    end
-                    %                     trust_box_size = cfg.initial_trust_box_size;
-                    penalty_coeff = cfg.merit_coeff_increase_ratio*penalty_coeff;
-                end % loop 2 ends
-
-                if ~success %infea_flag
-                    % if CVS infeasible, directly reuse solution from
-                    % previous step
-                    break
-                end
-
-                x = this.convState(s,snum,'x');
-                %                 uref = this.convState(s,snum,'u');
-                z = this.convState(s,snum,'z');
-
-                % here we use the difference between the actual gamma and
-                % gamma_aprx to decide the region.
-                is_in_fov = zeros(this.gmm_num,N);
-                gamma_exact = zeros(this.gmm_num,N);
-                %                 gamma_aprx = zeros(this.gmm_num,N);
-                tmp_rbt = this;
-
-                for ii = 1:N
-                    for jj = 1:this.gmm_num
-                        %%% this part can be revised when using probability
-                        %%% of inFOV later
-
-                        tar_pos = x(2*jj-1:2*jj,ii+1); % use each gmm component mean as a possible target position
-                        % actual inFOV
-                        tmp_rbt.state = z(:,ii+1);
-                        is_in_fov(jj,ii) = tmp_rbt.inFOV(tar_pos);
-
-                        % exact gamma
-                        gamma_exact(jj,ii) = this.gam(z(1:2,ii+1),z(3,ii+1),...
-                            tar_pos,alp1,alp2,alp3);
-
-                        % approximated inFOV
-                        %                         gamma_aprx(jj,ii) = gam_aprx(z(1:2,ii+1),z(3,ii+1),...
-                        %                             tar_pos,zref(1:2,ii+1),zref(3,ii+1),alp1,alp2,alp3);
-                    end
-                end
-
-                %                     tmp_ratio = zeros(this.gmm_num,N);
-                tmp_dif = zeros(this.gmm_num,N);
-                for ii = 1:N
-                    for jj = 1:this.gmm_num
-                        %                         tmp_dif(jj,ii) = abs(gamma_aprx(jj,ii)-gamma_exact(jj,ii));
-                        tmp_dif(jj,ii) = abs(is_in_fov(jj,ii)-gamma_exact(jj,ii));
-                        %                             tmp_ratio(jj,ii) = abs((gamma_aprx(jj,ii)-gamma_exact(jj,ii))/max(gamma_exact(jj,ii),0.001));
-                    end
-                end
-
-                % update initial solution for next iteration
-                s = this.updOptVar(s,snum,alp1,alp2,alp3);
-                % terminating condition: the actual in/out FOV is
-                % consistent with that of planning
-                if max(tmp_dif) <= cfg.gamma_tol %0.05
-                    fprintf('  [gamma loop] Robot.m, line %d\n', MFileLineNr())
-                    fprintf('  Gamma error is within tolerance, break out of gamma loop\n')
-                    break
-                elseif gam_iter >= cfg.max_gam_iter
-                    cprintf('Red',sprintf('  [gamma loop] Robot.m, line %d.  max gamma iteration reached. break out of gamma loop\n',MFileLineNr()))
-                    break
-                else
-                    cprintf('Magenta',sprintf('  [gamma loop] Robot.m, line %d.  gamma_exact is not close, go to another iteration.\n',MFileLineNr()))
-                    alp1 = alp1*alp_inc;
-                    alp2 = alp2*alp_inc;
-                    alp3 = alp3*alp_inc;
-                end
-                gam_iter = gam_iter+1;
-            end % loop 1 ends
-
-            uref = this.convState(s,snum,'u');
-
-            if ~success %infea_flag
-                uref = [uref(:,2:end),uref(:,end)];
-            end
-
-            % use actual dynamics to simulate
-            zref = this.simState(uref,zref(:,1));
-            optz = zref;
-            optu = uref;
-
-            % visualize the FOV along the planned path
-            %%%%% xref in this part needs change when infeasibility happens
-            %             this.plotPlannedTraj(optz,xref,fld)
-            %             }
-        end
-
         function [this,optz,list_tmp] = Planner(this,fld,sim,plan_mode,list_tmp,ps,pt,tt,ii)
 
             is_tracking = this.is_tracking;
@@ -755,7 +482,7 @@ classdef RobotClass
             if is_tracking
                 max_depth = 4;
             else
-                max_depth = 30;
+                max_depth = 60;
             end
             %discount factor
             if is_tracking
@@ -775,7 +502,7 @@ classdef RobotClass
             w = this.w;
 
             for jj = 1:planlen
-                [list_tmp,Reward,num] = this.simulate(fld,sim,1,num,list_tmp,max_depth,eta,ii+1,tt,interpolated_points,a,B,w);
+                [list_tmp,Reward,num] = this.simulate(fld,sim,1,num,list_tmp,max_depth,eta,ii+1,tt,interpolated_points,a,B,w,pt,ps);
             end
             %}
             %{
@@ -789,7 +516,7 @@ classdef RobotClass
 
             max_value = -10000;
             if isempty(list_tmp(1).children)
-                optz = z;
+                optz = this.state;
             else
                 val = zeros(length(list_tmp(1).children),1);
                 for jj = 1:length(list_tmp(1).children)
@@ -798,26 +525,32 @@ classdef RobotClass
                 [value_max,maxid] = max(val);
                 if value_max == 0
                     optz = this.state;
+                    this.traj = [this.traj repmat(optz(1:3),1,21)];
                 else
                     opt = list_tmp(1).children(maxid);
                     optz = list_tmp(opt).state;
                     id = list_tmp(opt).a_num;
+                    z = this.state;
                     if is_tracking
                         p = pt{id};
                     else
                         p = ps{id};
                     end
-                    z = this.state;
                     this.traj = [this.traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)']];
                 end
             end
+            this.value_max = value_max;
 
             %list(ii,1:length(list_tmp)) = list_tmp;
         end
 
         %% policy tree construction
-        function [list_tmp,Reward,num] = simulate(this,fld,sim,begin,num,list_tmp,depth,eta,simIndex,tt,interpolated_points,a,B,w) 
-            K = 3;
+        function [list_tmp,Reward,num] = simulate(this,fld,sim,begin,num,list_tmp,depth,eta,simIndex,tt,interpolated_points,a,B,w,pt,ps) 
+            if this.is_tracking
+                K = 3;
+            else
+                K = 1;
+            end
             alpha = 0.1;
             control = [fld.target.control(tt,simIndex,1);fld.target.control(tt,simIndex,2)];
 
@@ -825,52 +558,89 @@ classdef RobotClass
                 Reward = 0;
                 return
             else
+                z = list_tmp(begin).state(1:3);
+
                 list_tmp(begin).N = list_tmp(begin).N+1;
                 %if length(list_tmp(begin).children) == list_tmp(begin).children_maxnum
                 if isempty(list_tmp(begin).a)
-                    [begin,list_tmp] = this.best_child(begin,0.732,list_tmp);
+                    if ~isempty(list_tmp(begin).children)
+                        [begin,list_tmp] = this.best_child(begin,0.732,list_tmp);
+                    else
+                        begin_tmp = begin;
+                        begin = list_tmp(begin).parent;
+                        if begin ~= 0
+                            list_tmp(begin).children(find(list_tmp(begin).children==begin_tmp))=[];
+                        end
+                        Reward = -100;
+                        return
+                    end
                 else
                     num = num + 1;
-                    [list_tmp,begin,flag2] = this.expand(fld,sim,begin,num,list_tmp,0,1,interpolated_points,a);
+                    [list_tmp,begin,flag2] = this.expand(fld,sim,begin,num,list_tmp,0,1,interpolated_points,a,pt,ps);
                     if flag2 == 0
                         num = num - 1;
-                        [begin,list_tmp] = this.best_child(begin,0.732,list_tmp);
+                        if ~isempty(list_tmp(begin).children)
+                            [begin,list_tmp] = this.best_child(begin,0.732,list_tmp);
+                        else
+                            begin_tmp = begin;
+                            begin = list_tmp(begin).parent;
+                            if begin ~= 0
+                                list_tmp(begin).children(find(list_tmp(begin).children==begin_tmp))=[];
+                            end
+                            Reward = -100;
+                            return
+                        end
                     end
                 end
-
+                
                 num_a = begin;
 
-                if ~this.is_tracking
-                    if any([1;1] >= list_tmp(num_a).state(1:2))||any([49;49] <= list_tmp(num_a).state(1:2))||fld.map.region_exp(ceil(list_tmp(num_a).state(1)),ceil(list_tmp(num_a).state(2))) == 0
-                    %if any([0;0] >= list_tmp(num_a).state(1:2))||any([50;50] <= list_tmp(num_a).state(1:2))||any([0;0] >= list_tmp(num_a).inter_state(1:2))||any([50;50] <= list_tmp(num_a).inter_state(1:2))||fld.map.region_exp(ceil(list_tmp(num_a).state(1)),ceil(list_tmp(num_a).state(2))) == 0||fld.map.region_exp(ceil(list_tmp(num_a).inter_state(1)),ceil(list_tmp(num_a).inter_state(2))) == 0
-                        list_tmp(num_a).N = list_tmp(num_a).N+1;
-                        %%%% need to be modified
-                        list_tmp(num_a).Q = -1;
-                        Reward = -1;
-                        return
-                        %{
-                    elseif fld.map.region_exp(ceil(list_tmp(num_a).state(1)),ceil(list_tmp(num_a).state(2))) == 0||fld.map.region_exp(ceil(list_tmp(num_a).inter_state(1)),ceil(list_tmp(num_a).inter_state(2))) == 0
-                        list_tmp(num_a).N = list_tmp(num_a).N+1;
-                        %%%% need to be modified
-                        list_tmp(num_a).Q = -1;
-                        Reward = -1;
-                        return
-                        %}
-                    end
-
+                %
+                id = list_tmp(num_a).a_num;
+                if this.is_tracking
+                    p = pt{id};
+                else
+                    p = ps{id};
                 end
+
+                tmp = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'];
+
+                wrong = 0;
+                for jj = 1:21
+                    if any([1;1] >= tmp(1:2,jj))||any([49;49] <= tmp(1:2,jj))||this.map.region(ceil(tmp(1,jj)),ceil(tmp(2,jj))) < 0.3
+                        wrong = 1;
+                        break
+                    end
+                end
+
+                if ~this.is_tracking
+                    if wrong
+                        %if any([0;0] >= list_tmp(num_a).state(1:2))||any([50;50] <= list_tmp(num_a).state(1:2))||any([0;0] >= list_tmp(num_a).inter_state(1:2))||any([50;50] <= list_tmp(num_a).inter_state(1:2))||fld.map.region_exp(ceil(list_tmp(num_a).state(1)),ceil(list_tmp(num_a).state(2))) == 0||fld.map.region_exp(ceil(list_tmp(num_a).inter_state(1)),ceil(list_tmp(num_a).inter_state(2))) == 0
+                        list_tmp(num_a).N = list_tmp(num_a).N+1;
+                        %%%% need to be modified
+                        list_tmp(num_a).Q = -100;
+                        Reward = -100;
+                        return
+                    end
+                end
+                %}
+
                 num_a = begin;
                 list_tmp(num_a).N = list_tmp(num_a).N+1;
 
+                %{
                 t = 1;
                 B(1:2,:) = B(1:2,:) + [control(1).*cos(B(3,:))*t;control(1).*sin(B(3,:))*t];
                 B(3,:) = B(3,:) + control(2)*t;
+                B = (mvnrnd(B',fld.target.Q))';
+                %}
+                %B(1:2,:) = B(1:2,:) -1 + 2*[rand;rand];
                 B = (mvnrnd(B',fld.target.Q))';
 
                 % feasible particles
                 jj = 1;
                 for ii = 1:size(B,2)
-                    if any([0;0] > B(1:2,jj))||any([50;50] < B(1:2,jj))||fld.map.region_exp(ceil(B(1,jj)),ceil(B(2,jj))) == 0
+                    if any([1;1] > B(1:2,jj))||any([49;49] < B(1:2,jj))||this.map.region_exp(ceil(B(1,jj)),ceil(B(2,jj))) < 0.3
                         B(:,jj) = [];
                         w(jj) = [];
                         continue
@@ -925,7 +695,7 @@ classdef RobotClass
                         end
                     end
                     num = num + 1;
-                    [list_tmp,begin] = this.expand(fld,sim,begin,num,list_tmp,o,2,interpolated_points,a);
+                    [list_tmp,begin] = this.expand(fld,sim,begin,num,list_tmp,o,2,interpolated_points,a,pt,ps);
                     flag = 1;
                 else
                     begin = list_tmp(begin).children(randperm(length(list_tmp(begin).children),1));
@@ -948,7 +718,7 @@ classdef RobotClass
                     Reward = reward + eta*rollout;
                 else
                     simIndex = simIndex + 1;
-                    [list_tmp,Reward,num] = this.simulate(fld,sim,begin,num,list_tmp,depth-1,eta,simIndex,tt,interpolated_points,a,B,w);
+                    [list_tmp,Reward,num] = this.simulate(fld,sim,begin,num,list_tmp,depth-1,eta,simIndex,tt,interpolated_points,a,B,w,pt,ps);
                     Reward = reward + eta*Reward;
                 end
                 list_tmp(num_o).N = list_tmp(num_o).N+1;
@@ -975,7 +745,7 @@ classdef RobotClass
             end
         end
 
-        function [list_tmp,begin,flag2] = expand(this,fld,sim,begin,num,list_tmp,o,tmp,interpolated_points,a)
+        function [list_tmp,begin,flag2] = expand(this,fld,sim,begin,num,list_tmp,o,tmp,interpolated_points,a,pt,ps)
             t = 1;
             flag2 = 1;
             node = list_tmp(begin);
@@ -1018,10 +788,33 @@ classdef RobotClass
                         -interpolated_points(action(5),1,1)*cos(node.state(3))+interpolated_points(action(5),1,2)*sin(node.state(3))+node.state(2);
                         node.state(3)+interpolated_points(action(5),1,3)];
 
-%                     if norm(state(1:2)-state_estimation(1:2)) < 1%&&is_tracking
-%                         continue
-%                     end
+                    %                     if norm(state(1:2)-state_estimation(1:2)) < 1%&&is_tracking
+                    %                         continue
+                    %                     end
 
+                    id = action(5);
+                    if this.is_tracking
+                        p = pt{id};
+                    else
+                        p = ps{id};
+                    end
+
+                    z = state(1:3);
+                    tmp = [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)'];
+
+                    wrong = 0;
+                    for jj = 1:21
+                        if any([1;1] >= tmp(1:2,jj))||any([49;49] <= tmp(1:2,jj))||this.map.region(ceil(tmp(1,jj)),ceil(tmp(2,jj))) < 0.3
+                            wrong = 1;
+                            break
+                        end
+                    end
+
+                    if wrong
+                        break
+                    end
+
+                    %{
                     if any([0;0] >= state(1:2))||any([50;50] <= state(1:2))||any([0;0] >= inter_state(1:2))||any([50;50] <= inter_state(1:2))
                         flag = 1;
                         inregion = 0;
@@ -1040,6 +833,7 @@ classdef RobotClass
                     if state(4)>=0&&state(4)<=30&&flag==0&&this.is_tracking==1%&&abs(action(3))<0.4
                         break
                     end
+                    %}
                     list_tmp(begin).children_maxnum = list_tmp(begin).children_maxnum-1;
                 end
                 %}
@@ -1119,7 +913,7 @@ end
                 reward = 0;
                 return
             else
-
+                %{
                 if simIndex <= 210
                     control = [fld.target.control(tt,simIndex,1);fld.target.control(tt,simIndex,2)];
                 else
@@ -1131,6 +925,9 @@ end
                 B(1:2,:) = B(1:2,:) + [control(1).*cos(B(3,:))*t;control(1).*sin(B(3,:))*t];
                 B(3,:) = B(3,:) + control(2)*t;
                 B = (mvnrnd(B',Q))';
+                %}
+                %B(1:2,:) = B(1:2,:) -1 + 2*[rand;rand];
+                B = (mvnrnd(B',fld.target.Q))';
 
                 B_tmp1 = B;
                 %{
@@ -1197,7 +994,7 @@ end
                         state(2) = node.state(2)-action(1)*cos(node.state(3))+action(2)*sin(node.state(3));
                         state(3) = node.state(3)+action(3);
                         state(4) = action(4);
-                        if any([0;0] >= state(1:2))||any([50;50] <= state(1:2))||fld.map.region_exp(ceil(state(1)),ceil(state(2))) == 0||fld.map.V(ceil(node.state(1)),ceil(node.state(2)),ceil(state(1)),ceil(state(2))) == 0||state(4)<0%||state(4)>5
+                        if any([0;0] >= state(1:2))||any([50;50] <= state(1:2))||this.map.region_exp(ceil(state(1)),ceil(state(2))) < 0.3||fld.map.V(ceil(node.state(1)),ceil(node.state(2)),ceil(state(1)),ceil(state(2))) == 0||state(4)<0%||state(4)>5
                             reward = 0;
                             node.a(:,id) = [];
                         else
@@ -1216,7 +1013,7 @@ end
                         state(2) = node.state(2)-action(1)*cos(node.state(3))+action(2)*sin(node.state(3));
                         state(3) = node.state(3)+action(3);
                         state(4) = action(4);
-                        if any([0;0] >= state(1:2))||any([50;50] <= state(1:2))||fld.map.region_exp(ceil(state(1)),ceil(state(2))) == 0||fld.map.V(ceil(node.state(1)),ceil(node.state(2)),ceil(state(1)),ceil(state(2))) == 0||state(4)<0%||state(4)>5
+                        if any([0;0] >= state(1:2))||any([50;50] <= state(1:2))||this.map.region_exp(ceil(state(1)),ceil(state(2))) < 0.3||fld.map.V(ceil(node.state(1)),ceil(node.state(2)),ceil(state(1)),ceil(state(2))) == 0||state(4)<0%||state(4)>5
                             continue
                         end
                         %
@@ -1253,7 +1050,7 @@ end
         
         function reward = MI(this,fld,sim,state,particles,w)
             %
-            if any([0;0] >= state(1:2))||any([50;50] <= state(1:2))||fld.map.region_exp(ceil(state(1)),ceil(state(2))) == 0
+            if any([0;0] >= state(1:2))||any([50;50] <= state(1:2))||this.map.region_exp(ceil(state(1)),ceil(state(2))) < 0.3
                 reward = -1000;
                 return
             end

@@ -4,6 +4,8 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %% Simulation Setup
+importfile('APFT_small_scene1.mat');
+importfile('structured_map.mat');
 
 traj_rbt = cell(5,50);
 particles_all = cell(5,50,200);
@@ -49,7 +51,8 @@ save_video = true;
 % target info
 
 % target.pos = [10;20];
-target.pos = [targetPose(tt,1,1);targetPose(tt,1,2);targetPose(tt,1,3)];
+%target.pos = [targetPose(tt,1,1);targetPose(tt,1,2);targetPose(tt,1,3)];
+target.pos = [45;46;0];
 
 switch tar_model
     case 'static'
@@ -76,7 +79,7 @@ end
 target.Q = [0.5 0 0;0 0.5 0;0 0 0.01];
 
 target.model_idx = 1;
-target.traj = targetPose;
+target.traj = target.pos';
 target.control = targetControl;
 target.target_model = tar_model;
 
@@ -92,9 +95,10 @@ grid_step = 0.5; % the side length of a probability cell
 % obstacle info 
 map.polyin = polyin;
 map.poly = poly;
-map.region = region1;
-map.region_exp = region;
+map.region = 1-region1;
+map.region_exp = 1-region;
 map.V = V;
+map.occ_map = occ_map;
 
 inPara_fld = struct('fld_cor',[xMin,xMax,yMin,yMax],'target',target,'dt',dt,'map',map);
 fld = FieldClass(inPara_fld);
@@ -104,8 +108,13 @@ fld = FieldClass(inPara_fld);
 inPara_rbt = struct;
 % robot state
 % initial state [x,y,heading,velocity]
-inPara_rbt.state = [rbt_state(tt,:)';1];
-inPara_rbt.traj = rbt_state(tt,:)';
+% inPara_rbt.state = [rbt_state(tt,:)';1];
+% inPara_rbt.traj = rbt_state(tt,:)';
+inPara_rbt.state = [3;3;0;1];
+inPara_rbt.state = [5;17;pi;1];
+inPara_rbt.state = [15;5;0;1];
+%inPara_rbt.state = [3;48;-pi/2;1];
+inPara_rbt.traj = inPara_rbt.state(1:3);
 % z(3) = pi/2;
 %z=[48;48;pi;1];
 %z=[3;3;pi/2;1];
@@ -125,12 +134,19 @@ inPara_rbt.del_g = @(z,u) z+u*dt;
 % target defintion
 inPara_rbt.target = target;
 
+map = {};
+map.region = zeros(50,50);
+map.region_exp = zeros(50,50);
+map.V = zeros(50,50,50,50);
+map.occ_map = occupancyMap(50,50,1);
+inPara_rbt.map = map;
+
 % sensor
 % (TODO:changliu) needs further revision
 inPara_rbt.sensor_type = sensor_type;
 inPara_rbt.theta0 = pi/2; 
 inPara_rbt.minrange = 1;%15 4.5;
-inPara_rbt.maxrange = 6;
+inPara_rbt.maxrange = 8;
 
 inPara_rbt.inFOV_hist = [];
 inPara_rbt.is_tracking = 0;
@@ -138,7 +154,7 @@ inPara_rbt.is_tracking = 0;
 switch sensor_type 
     case 'rb'
         % range-bearing sensor
-        inPara_rbt.h = @(x,z) [sqrt(sum((x-z(1:2)).^2)+0.1);atan2(x(2,:)-z(2),x(1,:)-z(1))-z(3)];
+        inPara_rbt.h = @(x,z) [sqrt(sum((x(1:2,:)-z(1:2)).^2)+0.1);atan2(x(2,:)-z(2),x(1,:)-z(1))-z(3)];
         inPara_rbt.del_h = @(x,z) [2*x(1) 0; 0 2*x(2)]; % z is the robot state.
         inPara_rbt.R = [0.1 0;0 0.01];
         inPara_rbt.mdim = 2;
@@ -163,11 +179,17 @@ end
 % estimation initialization
 
 inPara_rbt.N = 100;
-inPara_rbt.w = ones(1,inPara_rbt.N)/inPara_rbt.N;
+% inPara_rbt.w = ones(1,inPara_rbt.N)/inPara_rbt.N;
 
 switch prior_case
     case 'unimodal'
-        inPara_rbt.particles = mvnrnd(target.pos,[3 0 0;0 3 0;0 0 0.005],inPara_rbt.N)';
+        %{
+        xMin=30;xMax=50;yMin=20;yMax=40;
+        [X,Y] = meshgrid((xMin+1):2:(xMax-1),(yMin+1):2:(yMax-1));%返回二维网格坐标（每一个坐标代表一个particle）,25^2=625个particles
+        inPara_rbt.particles = [X(:),Y(:)]';%2*N的矩阵，particles(:,i)表示第i个particle的坐标(x,y)
+        inPara_rbt.particles = [inPara_rbt.particles;zeros(1,size(inPara_rbt.particles,2))];
+        %}
+        inPara_rbt.particles = mvnrnd(target.pos,[100 0 0;0 100 0;0 0 0.005],inPara_rbt.N)';
     case 'multimodal'
         noise1 = zeros(1,3);
         noise1(1) = noise_point(tt,1,1);
@@ -185,6 +207,8 @@ switch prior_case
         gm = gmdistribution(mu,sigma,p);
         inPara_rbt.particles = random(gm,inPara_rbt.N)';
 end
+inPara_rbt.N = size(inPara_rbt.particles,2);
+inPara_rbt.w = ones(1,inPara_rbt.N)/inPara_rbt.N;
 inPara_rbt.est_pos = inPara_rbt.particles*inPara_rbt.w';
 %     error(ii) = norm(state_estimation(1:2)-tar_pos(1:2));
 inPara_rbt.P = {[100 0; 0 100];[100 0; 0 100];[100 0; 0 100]};

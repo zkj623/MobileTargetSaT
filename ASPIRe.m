@@ -3,7 +3,6 @@
 % clc 
 clear % clear global variables
 close all
-importfile('APFT_small_scene1.mat');
 
 t_search_all = [];
 loss_rate_all = [];
@@ -33,7 +32,7 @@ optu = [];
 
 % save figures to video
 if save_video
-    vidObj = VideoWriter(sprintf('%s_%s_multi_%d_%d_%s.avi',plan_mode,sensor_type,zz,tt,date));
+    vidObj = VideoWriter(sprintf('%s_%s_multi_%d_%d_%s.avi',plan_mode,sensor_type,zz,tt,datetime('today')));
     vidObj.FrameRate = 3;
     open(vidObj);
 end
@@ -46,7 +45,55 @@ for ii = 1:sim_len
     %fprintf('[main loop] gameSim.m, line %d, iteration %d, Progress: %d\n',MFileLineNr(),ii,ii/sim_len)
 
     %% target moves
-    fld = fld.targetMove(tt,ii);
+    %fld = fld.targetMove(tt,ii);
+    %{
+    if ~rbt.is_tracking
+        pos_tmp = fld.target.pos(1:2) -1 + 1.8*[rand;rand];
+        %flag = any([1;1] >= pos_tmp(1:2))||any([49;49] <= pos_tmp(1:2))||~fld.map.region(ceil(pos_tmp(1)),ceil(pos_tmp(2)));
+        while(any([1;1] >= pos_tmp(1:2))||any([49;49] <= pos_tmp(1:2))||~fld.map.region(ceil(pos_tmp(1)),ceil(pos_tmp(2))))
+            pos_tmp = fld.target.pos(1:2) + [rand;rand];
+        end
+    else 
+        pos_tmp = fld.target.pos(1:2) + 0.2*(fld.target.pos(1:2)-rbt.state(1:2)) + [rand;rand];
+        %flag = any([1;1] >= pos_tmp(1:2))||any([49;49] <= pos_tmp(1:2))||~fld.map.region(ceil(pos_tmp(1)),ceil(pos_tmp(2)));
+        while(any([1;1] >= pos_tmp(1:2))||any([49;49] <= pos_tmp(1:2))||~fld.map.region(ceil(pos_tmp(1)),ceil(pos_tmp(2))))
+            pos_tmp = fld.target.pos(1:2) + [rand;rand];
+        end
+    end
+    %}
+
+    %{
+    pos_tmp = fld.target.pos(1:2) -3 + 6*[rand;rand];
+    %flag = any([1;1] >= pos_tmp(1:2))||any([49;49] <= pos_tmp(1:2))||~fld.map.region(ceil(pos_tmp(1)),ceil(pos_tmp(2)));
+    while(any([1;1] >= pos_tmp(1:2))||any([49;49] <= pos_tmp(1:2))||~fld.map.region(ceil(pos_tmp(1)),ceil(pos_tmp(2))))
+        pos_tmp = fld.target.pos(1:2) + [rand;rand];
+    end
+    fld.target.pos(1:2) = pos_tmp;
+    %}
+    Q_tmp = [0.001 0;0 0.001];
+    if ii <= 10
+        move = mvnrnd([-0.5;0]',Q_tmp)';
+    elseif ii <= 20
+        move = mvnrnd([0;-0.5]',Q_tmp)';
+    elseif ii <= 30
+        move = mvnrnd([0.5;0]',Q_tmp)';
+    elseif ii <= 67
+        move = mvnrnd([0;-0.5]',Q_tmp)';
+    elseif ii <= 79
+        move = mvnrnd([-0.5;0]',Q_tmp)';
+    elseif ii <= 119
+        move = mvnrnd([0;-0.5]',Q_tmp)';
+    elseif ii <= 150
+        move = mvnrnd([-0.5;0]',Q_tmp)';
+    elseif ii <= 170
+        move = mvnrnd([0;0.5]',Q_tmp)';
+    else
+        move = mvnrnd([-0.4;0]',Q_tmp)';
+    end
+
+    fld.target.pos(1:2) = fld.target.pos(1:2) + move;
+
+    fld.target.traj = [fld.target.traj;fld.target.pos'];
 
     rbt.is_tracking = 0;
     if rbt.inFOV(rbt.state,fld.target.pos)&&fld.map.V(ceil(rbt.state(1)),ceil(rbt.state(2)),ceil(fld.target.pos(1)),ceil(fld.target.pos(2)))
@@ -55,6 +102,36 @@ for ii = 1:sim_len
 
     %% target position estimation
     rbt.y = rbt.sensorGen(fld);
+
+    ranges = zeros(50,1);
+    angles = linspace(-pi/4,pi/4,50);
+    maxrange = 8;
+
+    intsectionPts = rayIntersection(fld.map.occ_map,rbt.state(1:3)',angles,maxrange,0.8);
+
+    for jj = 1:size(intsectionPts,1)
+        if ~isnan(intsectionPts(jj,1))
+            ranges(jj) = norm(intsectionPts(jj,:)-rbt.state(1:2)')+0.1;
+            %ranges(jj) = 6;
+        else
+            ranges(jj) = 8.1;
+        end
+    end
+
+    scan = lidarScan(ranges,angles);
+
+    insertRay(rbt.map.occ_map,rbt.state(1:3)',scan,maxrange);
+
+    rbt.map.region = occupancyMatrix(rbt.map.occ_map);
+
+    region_tmp = rbt.map.region';
+    region1 = zeros(50,50);
+
+    for jj = 1:size(region_tmp,2)
+        region1(:,jj) = region_tmp(:,size(region_tmp,2)-jj+1);
+    end
+    rbt.map.region = 1-region1;
+    rbt.map.region_exp = rbt.map.region;
 
     % for debug purposes only
     %     sprintf('gameSim.m, line %d, measurement:',MFileLineNr())
@@ -67,8 +144,27 @@ for ii = 1:sim_len
 
     rbt.inFOV_hist = [rbt.inFOV_hist rbt.is_tracking];
 
-    sim.plotFilter(rbt,fld,tt,ii);
+    %sim.plotFilter(rbt,fld,tt,ii);
+    sim.plot_rbt_map(rbt,fld,tt,ii);
+    %pause(0.2);
 
+    if ii > 1
+        wrong = 0;
+        for jj = 0:20
+            if ~fld.map.region(ceil(rbt.traj(1,end-jj)),ceil(rbt.traj(2,end-jj)))
+                wrong = 1;
+                break
+            end
+        end
+        if wrong
+            disp('Collision.');
+            %pause
+            pause(1);
+            break
+        end
+    end
+
+    % skip tracking
 %     if rbt.is_tracking
 %         pause(0.1);
 %         clf
@@ -96,16 +192,16 @@ for ii = 1:sim_len
     list(ii,1:length(list_tmp)) = list_tmp;
 
 
-%     rbt = rbt.updState(optu);
-%     rbt.snum = snum;
-    
+    %     rbt = rbt.updState(optu);
+    %     rbt.snum = snum;
+
     % draw plot
     %sim.plotFilter(rbt,fld,tt,ii)
-%     pause(0.5)
+    %     pause(0.5)
 
     rbt.state = optz;
 
-    % save the plot as a video
+% save the plot as a video
     frame = getframe(gcf);
     if save_video
         writeVideo(vidObj,frame);
