@@ -76,7 +76,7 @@ switch tar_model
         target.Q = 0.25*eye(2); %0.04 % Covariance of process noise model for the target
         %}
 end
-target.Q = [0.5 0 0;0 0.5 0;0 0 0.01];
+target.Q = [1 0 0;0 1 0;0 0 0.01];
 
 target.model_idx = 1;
 target.traj = target.pos';
@@ -183,13 +183,13 @@ inPara_rbt.N = 100;
 
 switch prior_case
     case 'unimodal'
-        %{
-        xMin=30;xMax=50;yMin=20;yMax=40;
-        [X,Y] = meshgrid((xMin+1):2:(xMax-1),(yMin+1):2:(yMax-1));%返回二维网格坐标（每一个坐标代表一个particle）,25^2=625个particles
+        %
+        xMin=0;xMax=50;yMin=0;yMax=50;
+        [X,Y] = meshgrid((xMin+1):5:(xMax-1),(yMin+1):5:(yMax-1));%返回二维网格坐标（每一个坐标代表一个particle）,25^2=625个particles
         inPara_rbt.particles = [X(:),Y(:)]';%2*N的矩阵，particles(:,i)表示第i个particle的坐标(x,y)
         inPara_rbt.particles = [inPara_rbt.particles;zeros(1,size(inPara_rbt.particles,2))];
         %}
-        inPara_rbt.particles = mvnrnd(target.pos,[100 0 0;0 100 0;0 0 0.005],inPara_rbt.N)';
+        %inPara_rbt.particles = mvnrnd(target.pos,[100 0 0;0 100 0;0 0 0.005],inPara_rbt.N)';
     case 'multimodal'
         noise1 = zeros(1,3);
         noise1(1) = noise_point(tt,1,1);

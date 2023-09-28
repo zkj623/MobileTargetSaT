@@ -523,6 +523,7 @@ classdef RobotClass
                     val(jj) = list_tmp(list_tmp(1).children(jj)).Q;
                 end
                 [value_max,maxid] = max(val);
+                %{
                 if value_max == 0
                     optz = this.state;
                     this.traj = [this.traj repmat(optz(1:3),1,21)];
@@ -538,6 +539,19 @@ classdef RobotClass
                     end
                     this.traj = [this.traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)']];
                 end
+                %}
+                %
+                opt = list_tmp(1).children(maxid);
+                optz = list_tmp(opt).state;
+                id = list_tmp(opt).a_num;
+                z = this.state;
+                if is_tracking
+                    p = pt{id};
+                else
+                    p = ps{id};
+                end
+                this.traj = [this.traj [p(:,1)'*sin(z(3))+p(:,2)'*cos(z(3))+z(1);-p(:,1)'*cos(z(3))+p(:,2)'*sin(z(3))+z(2);z(3)+p(:,3)']];
+                %}
             end
             this.value_max = value_max;
 
