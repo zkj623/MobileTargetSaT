@@ -108,29 +108,40 @@ fld = FieldClass(inPara_fld);
 inPara_rbt = struct;
 % robot state
 % initial state [x,y,heading,velocity]
+
 % inPara_rbt.state = [rbt_state(tt,:)';1];
 % inPara_rbt.traj = rbt_state(tt,:)';
+
+% inPara_rbt.state = [5;17;pi;1];
+% inPara_rbt.state = [15;5;0;1];
 inPara_rbt.state = [3;3;0;1];
-inPara_rbt.state = [5;17;pi;1];
-inPara_rbt.state = [15;5;0;1];
-%inPara_rbt.state = [3;48;-pi/2;1];
 inPara_rbt.traj = inPara_rbt.state(1:3);
-% z(3) = pi/2;
-%z=[48;48;pi;1];
-%z=[3;3;pi/2;1];
-inPara_rbt.sdim = length(inPara_rbt.state); %%%%% this is incorrect, in fact, sdim was supposed for target state dim
+
+% inPara_rbt.state = {};
+% z = [3;3;0;1];
+% inPara_rbt.state{1} = z;
+% inPara_rbt.state{2} = z;
+% inPara_rbt.state{3} = z;
+% 
+% inPara_rbt.traj = {};
+% 
+% inPara_rbt.traj{1} = inPara_rbt.state{1}(1:3);
+% inPara_rbt.traj{2} = inPara_rbt.state{2}(1:3);
+% inPara_rbt.traj{3} = inPara_rbt.state{3}(1:3);
+
+% inPara_rbt.sdim = length(inPara_rbt.state); %%%%% this is incorrect, in fact, sdim was supposed for target state dim
 % input constraint
 % bounds for acceleration, angular velocity, and linear velocity
-inPara_rbt.a_lb = -3;
-inPara_rbt.a_ub = 1;
-inPara_rbt.w_lb = -pi/4;
-inPara_rbt.w_ub = pi/4;
-inPara_rbt.v_lb = 0;
-inPara_rbt.v_ub = 3;
+% inPara_rbt.a_lb = -3;
+% inPara_rbt.a_ub = 1;
+% inPara_rbt.w_lb = -pi/4;
+% inPara_rbt.w_ub = pi/4;
+% inPara_rbt.v_lb = 0;
+% inPara_rbt.v_ub = 3;
 % robot kinematics
 inPara_rbt.g = @(z,u) z+u*dt;
-inPara_rbt.Qr = blkdiag(0.09*eye(2),[0.01,0;0,0.04]);
-inPara_rbt.del_g = @(z,u) z+u*dt;
+% inPara_rbt.Qr = blkdiag(0.09*eye(2),[0.01,0;0,0.04]);
+% inPara_rbt.del_g = @(z,u) z+u*dt;
 % target defintion
 inPara_rbt.target = target;
 
@@ -332,5 +343,8 @@ inPara_rbt.dt = dt;
 % simulation parameters
 inPara_rbt.max_step = sim_len;
 
-rbt = RobotClass(inPara_rbt);
+rbt = {};
+rbt{1} = RobotClass(inPara_rbt);
+rbt{2} = RobotClass(inPara_rbt);
+rbt{3} = RobotClass(inPara_rbt);
     

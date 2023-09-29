@@ -8,13 +8,13 @@ classdef RobotClass
         % motion specs
         traj;
         state; % [x;y;theta;v]
-        a_lb;
-        a_ub;
-        w_lb;
-        w_ub;
-        v_lb;
-        v_ub;
-        Qr; % noise of motion
+%         a_lb;
+%         a_ub;
+%         w_lb;
+%         w_ub;
+%         v_lb;
+%         v_ub;
+%         Qr; % noise of motion
 
         % sensor specs
         sensor_type;
@@ -35,13 +35,10 @@ classdef RobotClass
 
         % target
         target;
-        A;
-        sdim; % dimension of state
 
         % filtering
         % xKF
-        P; % estimation covariance
-        P_hist;
+
         % PF
         particles; % array of particle positions [x;y]
         w; % particles' weight
@@ -58,34 +55,27 @@ classdef RobotClass
         dt;
         optu;
 
-        % configuration of optimization
-        snum;
-
         % action space
         a_S; % search phase
         a_T; % tracking phase
         int_pts_S;
         int_pts_T;
 
-        value_max;
-
-
         % performance metrics
-        ml_pos;
-        ent_pos;
+        value_max;
     end
 
     methods
         function this = RobotClass(inPara)
             this.state = inPara.state;
             this.traj = inPara.traj;
-            this.a_lb = inPara.a_lb;
-            this.a_ub = inPara.a_ub;
-            this.w_lb = inPara.w_lb;
-            this.w_ub = inPara.w_ub;
-            this.v_lb = inPara.v_lb;
-            this.v_ub = inPara.v_ub;
-            this.Qr = inPara.Qr;
+%             this.a_lb = inPara.a_lb;
+%             this.a_ub = inPara.a_ub;
+%             this.w_lb = inPara.w_lb;
+%             this.w_ub = inPara.w_ub;
+%             this.v_lb = inPara.v_lb;
+%             this.v_ub = inPara.v_ub;
+%             this.Qr = inPara.Qr;
 
             % sensor specs
             this.R = inPara.R;
@@ -101,16 +91,12 @@ classdef RobotClass
 
             % target
             this.target = inPara.target;
-            this.A = [];
-            this.sdim = inPara.sdim;
 
             % filtering
             this.sensor_type = inPara.sensor_type;
             % xKF
             this.est_pos = inPara.est_pos;
-            this.P = inPara.P;
             this.est_pos_hist = [];
-            this.P_hist = [];
             this.particles = inPara.particles;
             this.w = inPara.w;
             this.N = inPara.N;
@@ -451,23 +437,29 @@ classdef RobotClass
         end
 
         %% planning
-        function [this,optz,list_tmp] = Planner(this,fld,sim,plan_mode,list_tmp,ps,pt,tt,ii)
+        function [center,optz,list_tmp] = Planner(this,center,fld,sim,plan_mode,list_tmp,ps,pt,tt,ii)
 
-            is_tracking = this.is_tracking;
+            num = size(center,2);
+            a = {};
+            interpolated_points = {};
+
+            for jj = 1:num
+            is_tracking = center{jj}.is_tracking;
 
             if ~is_tracking
-                a = this.a_S;
-                interpolated_points = this.int_pts_S;
+                a{jj} = center{jj}.a_S;
+                interpolated_points{jj} = center{jj}.int_pts_S;
             else
-                a = this.a_T;
-                interpolated_points = this.int_pts_T;
+                a{jj} = center{jj}.a_T;
+                interpolated_points{jj} = center{jj}.int_pts_T;
+            end
             end
            
             list_tmp = [];
             root = Node_IMPFT;
             %Initialization
             root.num = 1;
-            root.state = this.state;%匀速运动v=1
+            root.state = [center{1}.state center{2}.state center{3}.state];
             root.hist = [];
             root.a = a;
             root.N = 0;

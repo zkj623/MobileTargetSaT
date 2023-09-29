@@ -95,54 +95,66 @@ for ii = 1:sim_len
 
     fld.target.traj = [fld.target.traj;fld.target.pos'];
 
-    rbt.is_tracking = 0;
-    if rbt.inFOV(rbt.state,fld.target.pos)&&fld.map.V(ceil(rbt.state(1)),ceil(rbt.state(2)),ceil(fld.target.pos(1)),ceil(fld.target.pos(2)))
-        rbt.is_tracking = 1;
+    for jj = 1:3
+        rbt{jj}.is_tracking = 0;
+    end
+
+    for jj = 1:3
+        if rbt{jj}.inFOV(rbt{jj}.state,fld.target.pos)&&fld.map.V(ceil(rbt{jj}.state(1)),ceil(rbt{jj}.state(2)),ceil(fld.target.pos(1)),ceil(fld.target.pos(2)))
+            rbt{jj}.is_tracking = 1;
+            break
+        end
     end
 
     %% target position estimation
-    rbt.y = rbt.sensorGen(fld);
-
+    for jj = 1:3
+        rbt{jj}.y = rbt{jj}.sensorGen(fld);
+    end
+   
     ranges = zeros(50,1);
     angles = linspace(-pi/4,pi/4,50);
     maxrange = 8;
 
-    intsectionPts = rayIntersection(fld.map.occ_map,rbt.state(1:3)',angles,maxrange,0.8);
+    for kk = 1:3
+        intsectionPts = rayIntersection(fld.map.occ_map,rbt{kk}.state(1:3)',angles,maxrange,0.8);
 
-    for jj = 1:size(intsectionPts,1)
-        if ~isnan(intsectionPts(jj,1))
-            ranges(jj) = norm(intsectionPts(jj,:)-rbt.state(1:2)')+0.1;
-            %ranges(jj) = 6;
-        else
-            ranges(jj) = 8.1;
+        for jj = 1:size(intsectionPts,1)
+            if ~isnan(intsectionPts(jj,1))
+                ranges(jj) = norm(intsectionPts(jj,:)-rbt{kk}.state(1:2)')+0.1;
+                %ranges(jj) = 6;
+            else
+                ranges(jj) = 8.1;
+            end
         end
+
+        scan = lidarScan(ranges,angles);
+
+        insertRay(rbt{kk}.map.occ_map,rbt{kk}.state(1:3)',scan,maxrange);
+
+        rbt{kk}.map.region = occupancyMatrix(rbt{kk}.map.occ_map);
+
+        region_tmp = rbt{kk}.map.region';
+        region1 = zeros(50,50);
+
+        for jj = 1:size(region_tmp,2)
+            region1(:,jj) = region_tmp(:,size(region_tmp,2)-jj+1);
+        end
+        rbt{kk}.map.region = 1-region1;
+        rbt{kk}.map.region_exp = rbt{kk}.map.region;
     end
-
-    scan = lidarScan(ranges,angles);
-
-    insertRay(rbt.map.occ_map,rbt.state(1:3)',scan,maxrange);
-
-    rbt.map.region = occupancyMatrix(rbt.map.occ_map);
-
-    region_tmp = rbt.map.region';
-    region1 = zeros(50,50);
-
-    for jj = 1:size(region_tmp,2)
-        region1(:,jj) = region_tmp(:,size(region_tmp,2)-jj+1);
-    end
-    rbt.map.region = 1-region1;
-    rbt.map.region_exp = rbt.map.region;
 
     % for debug purposes only
     %     sprintf('gameSim.m, line %d, measurement:',MFileLineNr())
     %     display(rbt.y)
 
-    [rbt.particles,rbt.w] = rbt.PF(fld,sim,tt,ii,rbt.state,rbt.particles,rbt.w,rbt.y,1);
-    rbt.est_pos = rbt.particles*rbt.w';
+    for jj = 1:3
+        [rbt{jj}.particles,rbt{jj}.w] = rbt{jj}.PF(fld,sim,tt,ii,rbt{jj}.state,rbt{jj}.particles,rbt{jj}.w,rbt{jj}.y,1);
+        rbt{jj}.est_pos = rbt{jj}.particles*rbt{jj}.w';
 
-    error(ii) = norm(rbt.est_pos(1:2)-fld.target.pos(1:2));
+        error(ii) = norm(rbt{jj}.est_pos(1:2)-fld.target.pos(1:2));
 
-    rbt.inFOV_hist = [rbt.inFOV_hist rbt.is_tracking];
+        rbt{jj}.inFOV_hist = [rbt{jj}.inFOV_hist rbt{jj}.is_tracking];
+    end
 
     %sim.plotFilter(rbt,fld,tt,ii);
     sim.plot_rbt_map(rbt,fld,tt,ii);
@@ -150,9 +162,14 @@ for ii = 1:sim_len
 
     if ii > 1
         wrong = 0;
-        for jj = 0:20
-            if ~fld.map.region(ceil(rbt.traj(1,end-jj)),ceil(rbt.traj(2,end-jj)))
-                wrong = 1;
+        for kk = 1:3
+            for jj = 0:20
+                if ~fld.map.region(ceil(rbt{kk}.traj(1,end-jj)),ceil(rbt{kk}.traj(2,end-jj)))
+                    wrong = 1;
+                    break
+                end
+            end
+            if wrong
                 break
             end
         end
@@ -183,7 +200,7 @@ for ii = 1:sim_len
     elseif strcmp(plan_mode,'sampling')
         %[optz,optu,s,snum,merit, model_merit, new_merit] = rbt.cvxPlanner_scp(fld,optz,optu,plan_mode);
     elseif strcmp(plan_mode,'ASPIRe')
-        [rbt,optz,list_tmp] = rbt.Planner(fld,sim,plan_mode,list_tmp,ps,pt,tt,ii);
+        [rbt,optz,list_tmp] = rbt{1}.Planner(rbt,fld,sim,plan_mode,list_tmp,ps,pt,tt,ii);
     end
 
     t = toc
@@ -217,6 +234,7 @@ for ii = 1:sim_len
 %     end     
    %}
 
+   %{
     if rbt.is_tracking
     time_tracking(tt) = time_tracking(tt) + t;
     else
@@ -227,6 +245,7 @@ for ii = 1:sim_len
     particles_all{zz,tt,ii} = rbt.particles;
     est_all{zz,tt,ii} = rbt.est_pos;
     obs_all{zz,tt,ii} = rbt.y;
+   %}
 end
 
 %     if ii == 166
