@@ -33,7 +33,7 @@ optu = [];
 
 % save figures to video
 if save_video
-    vidObj = VideoWriter(sprintf('ASPIRe_%s_MCTS_multi_%d_%d_%s.avi',sensor_type,zz,tt,date));
+    vidObj = VideoWriter(sprintf('%s_%s_%s_%s_%d_%d.avi',plan_mode,sensor_type,prior_case,datetime("today"),zz,tt));
     vidObj.FrameRate = 3;
     open(vidObj);
 end
@@ -70,11 +70,13 @@ for ii = 1:sim_len
 
     sim.plotFilter(rbt,fld,tt,ii);
 
+    %{
     if rbt.is_tracking
         pause(0.1);
         clf
         break
     end
+    %}
     
     %% robot motion planning
     tic
