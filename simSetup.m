@@ -196,7 +196,7 @@ switch prior_case
     case 'unimodal'
         %
         xMin=0;xMax=50;yMin=0;yMax=50;
-        [X,Y] = meshgrid((xMin+1):5:(xMax-1),(yMin+1):5:(yMax-1));%返回二维网格坐标（每一个坐标代表一个particle）,25^2=625个particles
+        [X,Y] = meshgrid((xMin+1):2:(xMax-1),(yMin+1):2:(yMax-1));%返回二维网格坐标（每一个坐标代表一个particle）,25^2=625个particles
         inPara_rbt.particles = [X(:),Y(:)]';%2*N的矩阵，particles(:,i)表示第i个particle的坐标(x,y)
         inPara_rbt.particles = [inPara_rbt.particles;zeros(1,size(inPara_rbt.particles,2))];
         %}

@@ -92,7 +92,6 @@ for ii = 1:sim_len
     end
 
     fld.target.pos(1:2) = fld.target.pos(1:2) + move;
-
     fld.target.traj = [fld.target.traj;fld.target.pos'];
 
     for jj = 1:3
@@ -103,6 +102,16 @@ for ii = 1:sim_len
         if rbt{jj}.inFOV(rbt{jj}.state,fld.target.pos)&&fld.map.V(ceil(rbt{jj}.state(1)),ceil(rbt{jj}.state(2)),ceil(fld.target.pos(1)),ceil(fld.target.pos(2)))
             rbt{jj}.is_tracking = 1;
             break
+        end
+    end
+
+    % communication
+    for jj = 1:3
+        rbt{jj}.comu = [];
+        for kk = 1:3
+            if jj~=kk&&norm(rbt{jj}.state(1:2)-rbt{kk}.state(1:2))<100
+                rbt{jj}.comu = [rbt{jj}.comu kk];
+            end
         end
     end
 
@@ -147,8 +156,11 @@ for ii = 1:sim_len
     %     sprintf('gameSim.m, line %d, measurement:',MFileLineNr())
     %     display(rbt.y)
 
+    state_all = [rbt{1}.state rbt{2}.state rbt{3}.state];
+    y_all = [rbt{1}.y rbt{2}.y rbt{3}.y];
+
     for jj = 1:3
-        [rbt{jj}.particles,rbt{jj}.w] = rbt{jj}.PF(fld,sim,tt,ii,rbt{jj}.state,rbt{jj}.particles,rbt{jj}.w,rbt{jj}.y,1);
+        [rbt{jj}.particles,rbt{jj}.w] = rbt{jj}.PF(fld,sim,tt,ii,rbt{jj}.state,state_all,rbt{jj}.particles,rbt{jj}.w,rbt{jj}.y,y_all,1);
         rbt{jj}.est_pos = rbt{jj}.particles*rbt{jj}.w';
 
         error(ii) = norm(rbt{jj}.est_pos(1:2)-fld.target.pos(1:2));
@@ -160,6 +172,8 @@ for ii = 1:sim_len
     sim.plot_rbt_map(rbt,fld,tt,ii);
     %pause(0.2);
 
+    % collision check
+    %{
     if ii > 1
         wrong = 0;
         for kk = 1:3
@@ -180,6 +194,7 @@ for ii = 1:sim_len
             break
         end
     end
+    %}
 
     % skip tracking
 %     if rbt.is_tracking
@@ -200,13 +215,13 @@ for ii = 1:sim_len
     elseif strcmp(plan_mode,'sampling')
         %[optz,optu,s,snum,merit, model_merit, new_merit] = rbt.cvxPlanner_scp(fld,optz,optu,plan_mode);
     elseif strcmp(plan_mode,'ASPIRe')
-        [rbt,optz,list_tmp] = rbt{1}.Planner(rbt,fld,sim,plan_mode,list_tmp,ps,pt,tt,ii);
+        %[rbt,optz,list_tmp] = rbt{1}.Planner(rbt,fld,sim,plan_mode,list_tmp,ps,pt,tt,ii);
     end
 
     t = toc
     %rbt.traj = [rbt.traj,optz];
 
-    list(ii,1:length(list_tmp)) = list_tmp;
+    %list(ii,1:length(list_tmp)) = list_tmp;
 
 
     %     rbt = rbt.updState(optu);
@@ -216,7 +231,11 @@ for ii = 1:sim_len
     %sim.plotFilter(rbt,fld,tt,ii)
     %     pause(0.5)
 
-    rbt.state = optz;
+    %
+    rbt{1}.state = rbt{1}.state + [0.2;0;0;0];
+    rbt{2}.state = rbt{2}.state + [0;0.2;0;0];
+    rbt{3}.state = rbt{3}.state + [0.2;0.2;0;0];
+    %}
 
 % save the plot as a video
     frame = getframe(gcf);
@@ -254,11 +273,12 @@ end
 %     %exportgraphics(ax,strcat('sim_0828_',num2str(ii),'.png'));
 %     end
 
-traj_rbt{zz,tt} = rbt.traj;
-% 
 if save_video
     close(vidObj);
 end
+
+traj_rbt{zz,tt} = rbt.traj;
+% 
 
 inFOV_time = find(rbt.inFOV_hist==1);
 if ~isempty(inFOV_time)

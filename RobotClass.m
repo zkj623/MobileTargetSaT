@@ -63,6 +63,9 @@ classdef RobotClass
 
         % performance metrics
         value_max;
+
+        % communication
+        comu;
     end
 
     methods
@@ -328,12 +331,13 @@ classdef RobotClass
 %             %}
 %         end
 
-        function [particles,w] = PF(this,fld,sim,tt,ii,state,particles,w,y,flag)
+        function [particles,w] = PF(this,fld,sim,tt,ii,state,state_all,particles,w,y,y_all,flag)
             
             %particles = this.particles;
             R = this.R;
             h = this.h;
             N = size(particles,2);
+            comu = this.comu;
 
             % particles = f(particles);
             % particles = (mvnrnd(particles',Q))';
@@ -351,7 +355,17 @@ classdef RobotClass
                 particles = (mvnrnd(particles',fld.target.Q))';
             end
 
-            FOV = this.inFOV(state,particles(1:2,:));
+            %
+            inver_FOV = ~this.inFOV(state,particles(1:2,:));
+            for jj = comu
+                inver_FOV = inver_FOV.*~this.inFOV(state_all(:,jj),particles(1:2,:));
+            end
+            FOV = ~inver_FOV;
+            %}
+
+            %FOV = this.inFOV(state,particles(1:2,:));
+          
+
             if strcmp(sim.sensor_type,'rb')
                 mu = h(particles(1:2,:),state);
                 P = normpdf(y(1),mu(1,:),sqrt(R(1,1)));
