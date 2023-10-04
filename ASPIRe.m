@@ -20,7 +20,7 @@ time_search = zeros(50,1);
 time_tracking = zeros(50,1);
 runtime = zeros(50,1);
 
-for tt = 1:50 %1:50 %44 %47
+for tt = 1:50 %44 %47
 
 % set up parameters
 simSetup;
@@ -33,7 +33,7 @@ optu = [];
 
 % save figures to video
 if save_video
-    vidObj = VideoWriter(sprintf('%s_%s_multi_%d_%d_%s.avi',plan_mode,sensor_type,zz,tt,date));
+    vidObj = VideoWriter(sprintf('%s_%s_%s_%s_%d_%d.avi',plan_mode,sensor_type,prior_case,datetime("today"),zz,tt));
     vidObj.FrameRate = 3;
     open(vidObj);
 end
