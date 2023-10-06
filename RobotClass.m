@@ -425,6 +425,7 @@ classdef RobotClass
             end
             w = w./sum(w);%归一化的粒子权重
             % resampling
+            %
             ess = 1/sum(w.^2);
             flag = 1;
             if flag == 0||flag == 1%&&ess > 0.5*N)
@@ -448,6 +449,7 @@ classdef RobotClass
 %             this.particles = particles;
 %             this.w = w;
 %             this.N = N;
+            %}
         end
 
         %% planning

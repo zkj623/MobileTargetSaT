@@ -32,7 +32,7 @@ optu = [];
 
 % save figures to video
 if save_video
-    vidObj = VideoWriter(sprintf('%s_%s_multi_%d_%d_%s.avi',plan_mode,sensor_type,zz,tt,datetime('today')));
+    vidObj = VideoWriter(sprintf('unknown_%s_%s_%d_%d_%s.avi',plan_mode,sensor_type,zz,tt,datetime('today')));
     vidObj.FrameRate = 3;
     open(vidObj);
 end

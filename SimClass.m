@@ -78,11 +78,19 @@ classdef SimClass
 
             show(rbt.map.occ_map)
 
+            %{
+            for jj = 1:size(rbt.particles,2)
+                if rbt.w(jj) < 10^-5
+                    continue
+                end
+                plot(rbt.particles(1,jj),rbt.particles(2,jj),'.','Color',[0 1 0.5],'MarkerSize',rbt.w(ii)*30);
+            end
+            %}
             plot(rbt.particles(1,:),rbt.particles(2,:),'.','Color',[0 1 0.5]);
             plot(rbt.est_pos(1),rbt.est_pos(2),"^",'Color','r','MarkerFaceColor','r',MarkerSize=15);
 
-            plot(fld.target.traj(1:ii+1,1),fld.target.traj(1:ii+1,2),'-','Color',[0.13333 0.5451 0.13333],LineWidth=3);
-            plot(rbt.traj(1,1:end-1),rbt.traj(2,1:end-1),'-','Color','r',MarkerSize=0.1,LineWidth=3);
+            %plot(fld.target.traj(1:ii+1,1),fld.target.traj(1:ii+1,2),'-','Color',[0.13333 0.5451 0.13333],LineWidth=3);
+            %plot(rbt.traj(1,1:end-1),rbt.traj(2,1:end-1),'-','Color','r',MarkerSize=0.1,LineWidth=3);
 
             plot(fld.target.traj(ii+1,1),fld.target.traj(ii+1,2),"pentagram",'Color',[0.13333 0.5451 0.13333],'MarkerFaceColor',[0.13333 0.5451 0.13333],MarkerSize=15);
             plot(rbt.state(1),rbt.state(2),'ro',MarkerFaceColor='r',MarkerSize=15);
