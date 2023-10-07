@@ -91,6 +91,7 @@ for ii = 1:sim_len
         move = mvnrnd([-0.4;0]',Q_tmp)';
     end
 
+    move = 0;
     fld.target.pos(1:2) = fld.target.pos(1:2) + move;
 
     fld.target.traj = [fld.target.traj;fld.target.pos'];

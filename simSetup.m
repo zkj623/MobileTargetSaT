@@ -76,7 +76,8 @@ switch tar_model
         target.Q = 0.25*eye(2); %0.04 % Covariance of process noise model for the target
         %}
 end
-target.Q = [1 0 0;0 1 0;0 0 0.01];
+%target.Q = [1 0 0;0 1 0;0 0 0.01];
+target.Q = [0.1 0 0;0 0.1 0;0 0 0.01];
 
 target.model_idx = 1;
 target.traj = target.pos';
