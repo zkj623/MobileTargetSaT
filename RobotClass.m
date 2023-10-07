@@ -392,7 +392,11 @@ classdef RobotClass
                 if y == -100
                     % if the target is outside FOV.
                     %
-                    if FOV(jj)&&fld.map.V(ceil(state(1)),ceil(state(2)),ceil(particles(1,jj)),ceil(particles(2,jj)))
+                    flg = fld.map.V(ceil(state(1)),ceil(state(2)),ceil(particles(1,jj)),ceil(particles(2,jj)));
+                    for kk = comu
+                        flg = flg||fld.map.V(ceil(state_all(1,kk)),ceil(state_all(2,kk)),ceil(particles(1,jj)),ceil(particles(2,jj)));
+                    end
+                    if FOV(jj)&&flg
                         w(jj) = 10^-20;
                     else
                         w(jj) = 1;
